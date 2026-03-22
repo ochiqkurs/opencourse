@@ -295,7 +295,7 @@ class ProfileView(LoginRequiredMixin, View):
 class AdminPanelView(LoginRequiredMixin, View):
     template_name = 'users/admin_panel.html'
 
-    def _context(self, course_form=None, module_form=None, lesson_form=None, active_tab='course'):
+    def _context(self, course_form=None, module_form=None, lesson_form=None, active_tab='bulk-create'):
         return {
             'course_form': course_form or CourseForm(prefix='course'),
             'module_form': module_form or ModuleForm(prefix='module'),

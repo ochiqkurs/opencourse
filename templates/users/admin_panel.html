@@ -8,10 +8,10 @@
 
     <!-- Tab buttons -->
     <div class="admin-tabs">
+        <button class="tab-btn {% if not active_tab or active_tab == 'bulk-create' %}active{% endif %}" data-tab="bulk-create">Bulk Create</button>
         <button class="tab-btn {% if active_tab == 'course' %}active{% endif %}" data-tab="course">Course</button>
         <button class="tab-btn {% if active_tab == 'module' %}active{% endif %}" data-tab="module">Module</button>
         <button class="tab-btn {% if active_tab == 'lesson' %}active{% endif %}" data-tab="lesson">Lesson</button>
-        <button class="tab-btn" data-tab="bulk-create">Bulk Create</button>
     </div>
 
     <!-- Course form -->
@@ -69,7 +69,7 @@
     </div>
 
     <!-- Bulk Create tab panel (Redesigned) -->
-    <div class="admin-tab-panel" id="tab-bulk-create">
+    <div class="admin-tab-panel {% if not active_tab or active_tab == 'bulk-create' %}active{% endif %}" id="tab-bulk-create">
         <div class="bc-layout">
             <!-- Left Column: Builder -->
             <div class="bc-builder">
@@ -317,6 +317,10 @@
 
     // ── Tab Switching ─────────────────────────────────
     var adminContainer = document.getElementById('admin-container');
+    // Apply bc-active on initial load if bulk-create is the active tab
+    if (document.getElementById('tab-bulk-create').classList.contains('active')) {
+        adminContainer.classList.add('bc-active');
+    }
     var btns = document.querySelectorAll('.tab-btn');
     var panels = document.querySelectorAll('.admin-tab-panel');
     btns.forEach(function (btn) {
