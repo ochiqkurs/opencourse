@@ -129,6 +129,9 @@
                                     <label style="display:flex;align-items:center;gap:.4rem;margin:0;cursor:pointer;">
                                         <input type="checkbox" id="bc-select-all"> Select All
                                     </label>
+                                    <label style="display:flex;align-items:center;gap:.4rem;margin:0;cursor:pointer;font-size:.85rem;color:var(--muted);">
+                                        <input type="checkbox" id="bc-use-description" checked> Include video description
+                                    </label>
                                     <span id="bc-selected-count">0 selected</span>
                                 </div>
                                 <div id="bc-playlist-items" class="bc-playlist-items"></div>
@@ -755,11 +758,12 @@
         var checked = playlistItems.querySelectorAll('.yt-item-check:checked');
         if (!checked.length) return;
         var lessons = [];
+        var useDesc = document.getElementById('bc-use-description').checked;
         checked.forEach(function (cb) {
             lessons.push({
                 title: cb.dataset.title,
                 slug: slugify(cb.dataset.title),
-                description: cb.dataset.description,
+                description: useDesc ? cb.dataset.description : '',
                 youtube_video_id: cb.dataset.videoId,
                 order: lessons.length
             });
