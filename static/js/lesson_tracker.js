@@ -58,14 +58,28 @@
       credentials: 'same-origin',
       body: JSON.stringify({ duration_seconds: Math.round(duration) }),
     })
-    .then(function (r) { return r.json(); })
+
+    .then(function (r) {
+      if (!r.ok) {
+        if (r.status === 403) {
+          showToast('Sessiya tugagan. Sahifani yangilang', 'error');
+          return Promise.reject('forbidden');
+        }
+        return r.text().then(function (t) { return Promise.reject('HTTP ' + r.status + ': ' + t.substring(0, 200)); });
+      }
+      return r.json();
+    })
     .then(function (d) {
+      if (!d) return;
       sessionId = d.session_id;
       sessionStorage.setItem(SESSION_KEY, sessionId);
       sessionStorage.setItem(SESSION_KEY + '_ts', Date.now());
     })
-    .catch(function () {
-      showToast('Video kuzatuvi ishlamayapti', 'error');
+    .catch(function (err) {
+      console.error('session_start failed:', err);
+      if (err !== 'forbidden') {
+        showToast('Video kuzatuvi ishlamayapti', 'error');
+      }
     });
   }
 

@@ -35,17 +35,17 @@ urlpatterns = [
         name='save_note',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/session/start/',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/boshlash/',
         views.session_start,
         name='session_start',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/session/event/',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/holat/',
         views.session_event,
         name='session_event',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/session/beacon/',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/xabar/',
         views.session_beacon,
         name='session_beacon',
     ),
