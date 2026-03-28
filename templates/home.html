@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load learning_extras %}
 
 {% block title %}Ochiq kurs{% endblock %}
 
@@ -23,11 +24,27 @@
     <h2 class="home-section-title">Mavjud Malakalar</h2>
     <div class="home-card-grid">
       {% for course in courses %}
-      <a class="home-card" href="{% url 'learning:course_detail' course.slug %}">
-        <h3>{{ course.title }}</h3>
-        {% if course.description %}
-          <p>{{ course.description }}</p>
-        {% endif %}
+      <a class="course-card" href="{% url 'learning:course_detail' course.slug %}">
+        <div class="course-card-thumb">
+          {% with thumb_url=course.get_thumbnail_url %}
+            {% if thumb_url %}
+              <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
+            {% else %}
+              <div class="course-card-thumb-placeholder">
+                <span>{{ course.title|truncatechars:1 }}</span>
+              </div>
+            {% endif %}
+          {% endwith %}
+        </div>
+        <div class="course-card-body">
+          <h3 class="course-card-title">{{ course.title }}</h3>
+          <div class="course-card-meta">
+            <span>{{ course.lesson_count }} dars</span>
+            {% if course.total_duration %}
+              <span>{{ course.total_duration|duration }}</span>
+            {% endif %}
+          </div>
+        </div>
       </a>
       {% endfor %}
     </div>

@@ -17,7 +17,7 @@
     <!-- Course form -->
     <div class="admin-tab-panel {% if active_tab == 'course' %}active{% endif %}" id="tab-course">
         <h2>Add Course</h2>
-        <form method="post" class="admin-form">
+        <form method="post" enctype="multipart/form-data" class="admin-form">
             {% csrf_token %}
             {% for field in course_form %}
             <div class="form-group">

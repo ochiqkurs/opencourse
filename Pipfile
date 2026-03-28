@@ -15,6 +15,7 @@ gunicorn = "*"
 whitenoise = "*"
 pytz = "*"
 python-dotenv = "*"
+pillow = "*"
 
 [dev-packages]
 

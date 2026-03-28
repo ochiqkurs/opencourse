@@ -6,7 +6,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 # from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -28,7 +28,10 @@ class HomeView(View):
     template_name = 'home.html'
 
     def get(self, request):
-        courses = Course.objects.all()
+        courses = Course.objects.annotate(
+            lesson_count=Count('modules__lessons'),
+            total_duration=Sum('modules__lessons__duration_seconds'),
+        )
         total_seconds = (
             VideoSession.objects.aggregate(Sum('actual_watched_seconds'))
             ['actual_watched_seconds__sum'] or 0
@@ -52,7 +55,10 @@ class CourseListView(View):
     template_name = 'learning/course_list.html'
 
     def get(self, request):
-        courses = Course.objects.all()
+        courses = Course.objects.annotate(
+            lesson_count=Count('modules__lessons'),
+            total_duration=Sum('modules__lessons__duration_seconds'),
+        )
         return render(request, self.template_name, {
             'courses': courses,
         })

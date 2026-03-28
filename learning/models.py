@@ -9,6 +9,7 @@ class Course(models.Model):
     title = models.CharField(max_length=255)
     slug = models.SlugField(unique=True, max_length=120)
     description = models.TextField(blank=True)
+    thumbnail = models.ImageField(upload_to='course_thumbnails/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -19,6 +20,21 @@ class Course(models.Model):
 
     def __str__(self):
         return self.title
+
+    def get_thumbnail_url(self):
+        """Return manual thumbnail if uploaded, else first lesson's YouTube thumbnail."""
+        if self.thumbnail:
+            return self.thumbnail.url
+        first_lesson = (
+            Lesson.objects
+            .filter(module__course=self)
+            .order_by('module__order', 'order')
+            .values_list('youtube_video_id', flat=True)
+            .first()
+        )
+        if first_lesson:
+            return f'https://img.youtube.com/vi/{first_lesson}/hqdefault.jpg'
+        return None
 
 
 class Module(models.Model):

@@ -309,7 +309,7 @@ class AdminPanelView(LoginRequiredMixin, View):
 
     def post(self, request):
         if 'add_course' in request.POST:
-            form = CourseForm(request.POST, prefix='course')
+            form = CourseForm(request.POST, request.FILES, prefix='course')
             if form.is_valid():
                 form.save()
                 messages.success(request, 'Course added successfully.')
