@@ -17,6 +17,7 @@
 | Frontend | Django Templates + vanilla JavaScript |
 | Markdown | `markdown` 3.10.2 + `bleach` 6.3.0 |
 | Auth | Django sessions + Telegram bot |
+| Images | Pillow 12.1.1 (course thumbnails) |
 | Time zone | Asia/Tashkent (UTC+5) |
 
 ---
@@ -24,40 +25,50 @@
 ## Repository Structure
 
 ```
-main-site/
-├── config/               # Django project settings
-│   ├── settings.py       # All settings (DB, security, static, apps)
-│   ├── urls.py           # Root URL routing
+opencourse/                          # Repository root (also Django project root)
+├── config/                          # Django project settings
+│   ├── settings.py                  # All settings (DB, security, static, apps)
+│   ├── urls.py                      # Root URL routing
 │   ├── asgi.py
 │   └── wsgi.py
-├── users/                # User management app
-│   ├── models.py         # UserProfile, TelegramAuthToken, TelegramProfile
-│   ├── views.py          # Auth, profile, admin panel, YouTube API
-│   ├── urls.py
-│   └── forms.py
-├── learning/             # Course content app
-│   ├── models.py         # Course, Module, Lesson, LessonProgress, VideoSession, VideoEvent, Note
-│   ├── views.py          # Course/lesson views, video session tracking
+├── users/                           # User management app
+│   ├── models.py                    # UserProfile, TelegramAuthToken, TelegramProfile
+│   ├── views.py                     # Auth, profile, admin panel, YouTube API
 │   ├── urls.py
 │   ├── forms.py
-│   ├── utils.py          # Markdown rendering helper
-│   └── templatetags/     # Custom filters (duration, dict_get)
-├── templates/            # Django HTML templates
-│   ├── base.html         # Shared layout (navbar, sidebar, footer)
+│   └── migrations/
+├── learning/                        # Course content app
+│   ├── models.py                    # Course, Module, Lesson, LessonProgress, VideoSession, VideoEvent, Note
+│   ├── views.py                     # Course/lesson views, video session tracking
+│   ├── urls.py
+│   ├── forms.py
+│   ├── utils.py                     # Markdown rendering helper
+│   ├── admin.py
+│   ├── templatetags/
+│   │   └── learning_extras.py       # Custom filters (duration, dict_get)
+│   ├── management/commands/
+│   │   └── fill_durations.py        # Populates lesson duration_seconds from YouTube API
+│   └── migrations/
+├── templates/                       # Django HTML templates
+│   ├── base.html                    # Shared layout (navbar, sidebar, footer)
 │   ├── home.html
-│   ├── registration/     # login.html (Telegram auth)
-│   ├── learning/         # course_list, course_detail, module_detail, lesson_detail
-│   └── users/            # profile, admin_panel, signup
+│   ├── registration/login.html      # Telegram auth page
+│   ├── learning/                    # course_list, course_detail, module_detail, lesson_detail
+│   └── users/                       # profile, admin_panel, signup
 ├── static/
 │   ├── css/style.css
 │   └── js/
-│       ├── lesson_tracker.js   # YouTube IFrame API, session events, heartbeat
-│       └── lesson_notes.js     # Markdown notes, save/preview
+│       ├── lesson_tracker.js        # YouTube IFrame API, session events, heartbeat
+│       └── lesson_notes.js          # Markdown notes, save/preview
+├── playlist-fetcher/
+│   └── fetcher.py                   # Standalone YouTube playlist fetching utility
 ├── .github/workflows/
-│   └── deploy.yml        # CI/CD: push to master → SSH deploy
+│   └── deploy.yml                   # CI/CD: push to master → SSH deploy
+├── manage.py
 ├── requirements.txt
 ├── Pipfile
-└── .env.example
+├── .env.example
+└── README.md
 ```
 
 ---
@@ -67,10 +78,12 @@ main-site/
 ### Content Hierarchy: `Course → Module → Lesson`
 
 ```
-Course      (title, slug, description, order)
+Course      (title, slug, description, thumbnail, order)
   └─ Module (title, slug, description, course FK, order)
        └─ Lesson (title, slug, description, module FK, youtube_video_id, duration_seconds, order)
 ```
+
+- **Course.thumbnail** — optional `ImageField` (uploaded to `course_thumbnails/`). Falls back to YouTube thumbnail of the first lesson via `get_thumbnail_url()`.
 
 ### Tracking Models
 
@@ -97,9 +110,9 @@ Course      (title, slug, description, order)
 | `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page |
 | `/malaka/<course>/<module>/<lesson>/complete/` | learning | POST: mark complete |
 | `/malaka/<course>/<module>/<lesson>/note/` | learning | POST: save note (JSON) |
-| `/malaka/<course>/<module>/<lesson>/session/start/` | learning | POST: start video session |
-| `/malaka/<course>/<module>/<lesson>/session/event/` | learning | POST: video event |
-| `/malaka/<course>/<module>/<lesson>/session/beacon/` | learning | POST: beacon (CSRF-exempt) |
+| `/malaka/<course>/<module>/<lesson>/davom/boshlash/` | learning | POST: start video session |
+| `/malaka/<course>/<module>/<lesson>/davom/holat/` | learning | POST: video event |
+| `/malaka/<course>/<module>/<lesson>/davom/xabar/` | learning | POST: beacon (CSRF-exempt) |
 | `/users/login/` | users | Telegram login (token generated) |
 | `/users/signup/` | users | Same flow as login |
 | `/users/profile/` | users | Profile + streak + activity graph |
@@ -110,6 +123,8 @@ Course      (title, slug, description, order)
 | `/api/auth/check/<token>/` | users | Browser polling (rate-limited) |
 
 URL namespaces: `learning:` and `users:`
+
+Session-related URL path segments use Uzbek words: `davom` (continue), `boshlash` (start), `holat` (state/event), `xabar` (beacon/message).
 
 ---
 
@@ -133,7 +148,7 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 - `last_play_position` tracks state-machine accuracy for incremental watch-time
 - Auto-completion: lesson marked complete when `watched_seconds >= 0.8 * duration_seconds`
 - Event throttling: heartbeat events throttled to 1-second minimum; state-critical events always processed
-- Beacon API endpoint is CSRF-exempt but verifies user authentication separately
+- Beacon API endpoint (`/davom/xabar/`) is CSRF-exempt but verifies user authentication separately
 
 ### Streak System
 - Updated when a lesson is completed or reaches 80% watched
@@ -148,7 +163,17 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ### Admin Bulk Create
 - Accepts nested JSON: `course → modules → lessons` with YouTube video IDs
 - Auto-generates slugs from titles
+- Optional `include_description` flag to include video descriptions from YouTube
 - YouTube playlist fetch available for automation
+
+### Course Thumbnails
+- Courses support an optional uploaded thumbnail (`ImageField`)
+- `Course.get_thumbnail_url()` returns the uploaded image URL, or falls back to the YouTube `hqdefault` thumbnail of the first lesson in the course
+- Requires Pillow; media files served from `/media/`
+
+### fill_durations Management Command
+- `python manage.py fill_durations` — fetches `duration_seconds` from the YouTube API for all lessons missing duration data
+- Useful after bulk-importing a course to populate accurate lesson lengths
 
 ---
 
@@ -224,7 +249,7 @@ For local dev, copy `.env.example` to `.env` (not committed).
 ### Setup
 ```bash
 git clone <repo>
-cd main-site
+cd opencourse
 cp .env.example .env   # fill in values
 pipenv install
 pipenv shell
@@ -235,10 +260,11 @@ python manage.py runserver
 
 ### Common Commands
 ```bash
-python manage.py makemigrations    # after model changes
-python manage.py migrate           # apply migrations
-python manage.py collectstatic     # for production static files
-python manage.py shell             # Django REPL
+python manage.py makemigrations        # after model changes
+python manage.py migrate               # apply migrations
+python manage.py collectstatic         # for production static files
+python manage.py shell                 # Django REPL
+python manage.py fill_durations        # populate lesson durations from YouTube API
 ```
 
 ### No Test Suite
@@ -261,7 +287,7 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 
 ## Security Notes
 
-- CSRF protection on all POST forms/endpoints; CSRF-exempt only on `/session/beacon/` (uses Beacon API)
+- CSRF protection on all POST forms/endpoints; CSRF-exempt only on `/davom/xabar/` (Beacon API)
 - Telegram bot callback secured by `BOT_SECRET` header check
 - User-submitted Markdown is sanitized with `bleach` before rendering
 - All security headers enabled: `X-Frame-Options DENY`, `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`
@@ -280,3 +306,7 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 | Progress | Per-user per-lesson completion state |
 | Streak | Consecutive days of learning activity |
 | Activity | Any lesson completion or 80%+ watch |
+| davom | Uzbek: "continue" — used in session URL segments |
+| boshlash | Uzbek: "start" — session start endpoint |
+| holat | Uzbek: "state/event" — session event endpoint |
+| xabar | Uzbek: "message/beacon" — session beacon endpoint |
