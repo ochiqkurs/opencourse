@@ -4,28 +4,70 @@
 {% block title %}{{ course.title }} – Ochiq kurs{% endblock %}
 
 {% block content %}
-<h1>{{ course.title }}</h1>
-{% if course.description %}
-  <p class="description">{{ course.description }}</p>
-{% endif %}
-
-{% if course_seconds %}
-  <p class="course-watched-time">Ushbu kursdagi videolarni umumiy {{ course_seconds|duration }} ko'rgansiz</p>
-{% endif %}
-
-{% if modules %}
-  <div class="card-grid">
-    {% for module in modules %}
-    <a class="card" href="{% url 'learning:module_detail' course.slug module.slug %}">
-      <h2>{{ module.title }}</h2>
-      {% if module.description %}
-        <p>{{ module.description }}</p>
-      {% endif %}
-      <span class="card-lesson-count">{{ module.lessons.count }} lesson{{ module.lessons.count|pluralize }}</span>
-    </a>
-    {% endfor %}
+<div class="course-detail-header">
+  <h1>{{ course.title }}</h1>
+  <div class="course-detail-meta">
+    {% if total_duration %}<span>{{ total_duration|duration }}</span>{% endif %}
+    <span>{{ total_lessons }} dars</span>
+    <span>{{ modules_data|length }} modul</span>
   </div>
-{% else %}
-  <p class="empty-message">No sub-topics yet. Check back soon.</p>
-{% endif %}
+  {% if course.description %}
+    <p class="description">{{ course.description }}</p>
+  {% endif %}
+
+  {% if next_lesson %}
+    <a
+      href="{% url 'learning:lesson_detail' course.slug next_lesson.module.slug next_lesson.slug %}"
+      class="btn btn-primary course-continue-btn"
+    >Davom etish &rarr;</a>
+  {% endif %}
+</div>
+
+<div class="module-accordion">
+  {% for item in modules_data %}
+  {% with module=item.module lessons=item.lessons percent=item.percent %}
+  <details class="module-block" {% if forloop.first %}open{% endif %}>
+    <summary class="module-summary">
+      <div class="module-summary-left">
+        <span class="module-title">{{ module.title }}</span>
+        {% if module.description %}
+          <span class="module-desc">{{ module.description }}</span>
+        {% endif %}
+      </div>
+      <div class="module-summary-right">
+        <div class="module-progress-row">
+          <div class="module-progress-bar">
+            <div class="module-progress-fill" style="width: {{ percent }}%"></div>
+          </div>
+          <span class="module-percent">{{ percent }}%</span>
+        </div>
+        <span class="module-duration">{{ item.total_seconds|duration }}</span>
+      </div>
+    </summary>
+
+    <ul class="module-lesson-list">
+      {% for lesson in lessons %}
+      <li class="module-lesson-item {% if lesson.progress and lesson.progress.is_completed %}completed{% endif %}">
+        <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">
+          <span class="lesson-status">
+            {% if lesson.progress and lesson.progress.is_completed %}
+              ✓
+            {% else %}
+              {{ forloop.counter }}
+            {% endif %}
+          </span>
+          <span class="lesson-info">
+            <span class="lesson-title">{{ lesson.title }}</span>
+            {% if lesson.duration_seconds %}
+              <span class="lesson-duration">{{ lesson.duration_seconds|duration }}</span>
+            {% endif %}
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endwith %}
+  {% endfor %}
+</div>
 {% endblock %}

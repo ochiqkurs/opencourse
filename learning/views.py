@@ -73,28 +73,65 @@ class CourseDetailView(View):
 
     def get(self, request, course_slug):
         course = get_object_or_404(Course, slug=course_slug)
-        modules = (
+        modules = list(
             course.modules
             .prefetch_related('lessons')
             .order_by('order')
         )
 
-        course_seconds = 0
+        # Build per-module progress data
+        next_lesson = None  # first incomplete lesson across all modules
+        modules_data = []
+
         if request.user.is_authenticated:
-            course_seconds = VideoSession.objects.filter(
-                user=request.user,
-                lesson__module__course=course,
-            ).aggregate(Sum('actual_watched_seconds'))['actual_watched_seconds__sum'] or 0
+            all_lesson_ids = [
+                lesson.id
+                for module in modules
+                for lesson in module.lessons.all()
+            ]
+            progress_map = {
+                p.lesson_id: p
+                for p in LessonProgress.objects.filter(
+                    user=request.user,
+                    lesson_id__in=all_lesson_ids,
+                )
+            }
+        else:
+            progress_map = {}
+
+        for module in modules:
+            lessons = list(module.lessons.order_by('order'))
+            total = len(lessons)
+            completed = 0
+            total_seconds = sum(l.duration_seconds or 0 for l in lessons)
+
+            for lesson in lessons:
+                lesson.progress = progress_map.get(lesson.id)
+                if lesson.progress and lesson.progress.is_completed:
+                    completed += 1
+                elif next_lesson is None:
+                    next_lesson = lesson
+
+            percent = int(completed / total * 100) if total else 0
+            modules_data.append({
+                'module': module,
+                'lessons': lessons,
+                'total': total,
+                'completed': completed,
+                'percent': percent,
+                'total_seconds': total_seconds,
+            })
+
+        # Total course stats
+        total_lessons = sum(m['total'] for m in modules_data)
+        total_duration = sum(m['total_seconds'] for m in modules_data)
 
         ctx = {
             'course': course,
-            'modules': modules,
-            'course_seconds': course_seconds,
-            'show_sidebar': True,
-            'sidebar_course': course,
-            'sidebar_modules': modules,
-            'current_module': None,
-            'current_lesson': None,
+            'modules_data': modules_data,
+            'next_lesson': next_lesson,
+            'total_lessons': total_lessons,
+            'total_duration': total_duration,
         }
         return render(request, self.template_name, ctx)
 
@@ -127,17 +164,10 @@ class ModuleDetailView(View):
             for lesson in lessons:
                 lesson.progress = None
 
-        sidebar_modules = course.modules.prefetch_related('lessons').order_by('order')
-
         ctx = {
             'course': course,
             'module': module,
             'lessons': lessons,
-            'show_sidebar': True,
-            'sidebar_course': course,
-            'sidebar_modules': sidebar_modules,
-            'current_module': module,
-            'current_lesson': None,
         }
         return render(request, self.template_name, ctx)
 
