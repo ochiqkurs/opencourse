@@ -3,7 +3,7 @@ name: Deploy Ochiq Kurs
 on:
   push:
     branches:
-      - master  # Sizda branch nomi 'master' ekanligini git status ko'rsatdi
+      - master
 
 jobs:
   deploy:
@@ -27,3 +27,10 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
             sudo systemctl restart gunicorn-ochiqkurs
+
+      - name: Purge Cloudflare cache
+        run: |
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
