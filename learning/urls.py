@@ -61,18 +61,8 @@ urlpatterns = [
         name='save_note',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/boshlash/',
-        views.session_start,
-        name='session_start',
-    ),
-    path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/holat/',
-        views.session_event,
-        name='session_event',
-    ),
-    path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/xabar/',
-        views.session_beacon,
-        name='session_beacon',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/koridi/',
+        views.record_view,
+        name='record_view',
     ),
 ]

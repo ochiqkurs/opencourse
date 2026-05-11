@@ -174,7 +174,6 @@ class LessonProgress(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
     is_completed = models.BooleanField(default=False)
-    watched_seconds = models.PositiveIntegerField(default=0)
     last_watched_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -185,41 +184,26 @@ class LessonProgress(models.Model):
         return f"{self.user.username} – {self.lesson.title} ({status})"
 
 
-class VideoSession(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='video_sessions')
-    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='video_sessions')
-    started_at = models.DateTimeField(auto_now_add=True)
-    ended_at = models.DateTimeField(null=True, blank=True)
-    last_position_seconds = models.PositiveIntegerField(default=0)
-    actual_watched_seconds = models.PositiveIntegerField(default=0)
-    max_reached_seconds = models.PositiveIntegerField(default=0)
-    last_play_position = models.PositiveIntegerField(null=True, blank=True)
+class LessonView(models.Model):
+    """One row per (user, lesson, day) — driven by 'video started playing' on the lesson page.
+
+    This is the single source of truth for the activity graph and streak.
+    Multiple plays of the same lesson on the same day collapse into one row.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='lesson_views')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='views')
+    viewed_on = models.DateField()
+    first_seen_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        indexes = [models.Index(fields=['user', 'lesson', 'ended_at'])]
+        unique_together = [('user', 'lesson', 'viewed_on')]
+        indexes = [
+            models.Index(fields=['user', 'viewed_on']),
+            models.Index(fields=['user', 'lesson']),
+        ]
 
     def __str__(self):
-        return f"{self.user.username} – {self.lesson.title} (session {self.id})"
-
-
-class VideoEvent(models.Model):
-    EVENT_TYPES = [
-        ('play', 'play'),
-        ('pause', 'pause'),
-        ('seek', 'seek'),
-        ('ended', 'ended'),
-        ('speed_change', 'speed_change'),
-        ('page_hidden', 'page_hidden'),
-        ('heartbeat', 'heartbeat'),
-    ]
-    session = models.ForeignKey(VideoSession, on_delete=models.CASCADE, related_name='events')
-    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
-    position_seconds = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    metadata = models.JSONField(default=dict, blank=True)
-
-    def __str__(self):
-        return f"{self.event_type} at {self.position_seconds}s (session {self.session_id})"
+        return f"{self.user.username} → {self.lesson.title} on {self.viewed_on}"
 
 
 class Note(models.Model):

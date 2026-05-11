@@ -1,22 +1,19 @@
 import json
 import pytz
 
-from datetime import timedelta
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Count, Sum, Q, Avg
-from django.http import JsonResponse, Http404
+from django.db.models import Count, Sum, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views import View
-from django.views.decorators.csrf import csrf_exempt
 
 from .models import (
-    Lesson, LessonProgress, Note, Course, Module, VideoEvent, VideoSession,
+    Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
 )
 from .forms import CourseReviewForm
@@ -24,6 +21,10 @@ from .utils import render_markdown
 
 User = get_user_model()
 UZT = pytz.timezone('Asia/Tashkent')  # UTC+5
+
+
+def _today_uzt():
+    return timezone.now().astimezone(UZT).date()
 
 
 def _course_card_annotations(qs):
@@ -50,9 +51,11 @@ class HomeView(View):
         if not featured:
             featured = list(courses[:6])
 
+        # Estimated hours of learning = sum of lesson durations across all views.
+        # Each view counts as one full lesson watch (good-enough proxy).
         total_seconds = (
-            VideoSession.objects.aggregate(Sum('actual_watched_seconds'))
-            ['actual_watched_seconds__sum'] or 0
+            LessonView.objects
+            .aggregate(s=Sum('lesson__duration_seconds'))['s'] or 0
         )
         total_hours = round(total_seconds / 3600)
         total_users = User.objects.filter(is_active=True).count()
@@ -271,7 +274,6 @@ class CourseDetailView(View):
         overall_percent = int(total_completed / total_lessons * 100) if total_lessons else 0
         is_complete = total_lessons > 0 and total_completed == total_lessons
 
-        # Auto-issue certificate
         if is_complete and request.user.is_authenticated and not has_certificate:
             Certificate.objects.get_or_create(user=request.user, course=course)
             has_certificate = True
@@ -365,7 +367,6 @@ class LessonDetailView(View):
                 user=request.user, lesson=lesson
             ).first()
             note = Note.objects.filter(user=request.user, lesson=lesson).first()
-            # Auto-enroll on first visit
             Enrollment.objects.get_or_create(user=request.user, course=course)
         else:
             progress = None
@@ -378,7 +379,6 @@ class LessonDetailView(View):
         prev_lesson = sibling_lessons[current_index - 1] if current_index and current_index > 0 else None
         next_lesson = sibling_lessons[current_index + 1] if current_index is not None and current_index < len(sibling_lessons) - 1 else None
 
-        # cross-module next/prev (if current is last/first within module)
         if not next_lesson:
             next_module = course.modules.filter(order__gt=module.order).order_by('order').first()
             if next_module:
@@ -394,7 +394,6 @@ class LessonDetailView(View):
 
         sidebar_modules = course.modules.prefetch_related('lessons').order_by('order')
 
-        # Mark completed lessons in sidebar
         if request.user.is_authenticated:
             all_ids = list(Lesson.objects.filter(module__course=course).values_list('id', flat=True))
             done_ids = set(
@@ -423,6 +422,49 @@ class LessonDetailView(View):
             'note_rendered': mark_safe(render_markdown(note.content)) if note and note.content else '',
         }
         return render(request, self.template_name, ctx)
+
+
+# ---------------------------------------------------------------------------
+# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/davom/koridi/
+# ---------------------------------------------------------------------------
+
+@login_required
+def record_view(request, course_slug, module_slug, lesson_slug):
+    """Record that the user pressed play on this lesson today.
+
+    Idempotent per (user, lesson, day). Also marks the lesson complete and
+    bumps the streak — playing the video counts as completing the lesson.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    today = _today_uzt()
+
+    _, created = LessonView.objects.get_or_create(
+        user=request.user, lesson=lesson, viewed_on=today,
+    )
+
+    progress, _ = LessonProgress.objects.get_or_create(
+        user=request.user, lesson=lesson
+    )
+    newly_completed = False
+    if not progress.is_completed:
+        progress.is_completed = True
+        progress.save(update_fields=['is_completed'])
+        newly_completed = True
+    else:
+        progress.save(update_fields=['last_watched_at'])
+
+    _update_streak(request.user)
+    if newly_completed:
+        _maybe_issue_certificate(request.user, lesson.module.course)
+
+    return JsonResponse({
+        'status': 'ok',
+        'new_view': created,
+        'is_completed': progress.is_completed,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +507,7 @@ def _maybe_issue_certificate(user, course):
 
 def _update_streak(user):
     from users.models import UserProfile
-    today = timezone.now().astimezone(UZT).date()
+    today = _today_uzt()
 
     profile, _ = UserProfile.objects.get_or_create(user=user)
 
@@ -473,7 +515,6 @@ def _update_streak(user):
         return
 
     if profile.last_activity_date is not None:
-        from datetime import timedelta
         delta = today - profile.last_activity_date
         if delta.days == 1:
             profile.current_streak += 1
@@ -485,6 +526,7 @@ def _update_streak(user):
     profile.last_activity_date = today
     profile.longest_streak = max(profile.longest_streak, profile.current_streak)
     profile.save(update_fields=['current_streak', 'longest_streak', 'last_activity_date'])
+
 
 # ---------------------------------------------------------------------------
 # POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/note/
@@ -570,191 +612,7 @@ def certificate_view(request, course_slug):
     })
 
 
-# ---------------------------------------------------------------------------
-# Session tracking helpers
-# ---------------------------------------------------------------------------
-
 def _get_lesson(course_slug, module_slug, lesson_slug):
     course = get_object_or_404(Course, slug=course_slug)
     module = get_object_or_404(Module, slug=module_slug, course=course)
     return get_object_or_404(Lesson, slug=lesson_slug, module=module)
-
-
-VALID_EVENT_TYPES = {et[0] for et in VideoEvent.EVENT_TYPES}
-MAX_METADATA_SIZE = 1024  # bytes
-EVENT_RATE_LIMIT_SECONDS = 1  # min interval between events per session
-
-
-def _clamp_position(position, lesson):
-    """Clamp position to [0, duration] if duration is known."""
-    position = max(0, position)
-    if lesson.duration_seconds:
-        position = min(position, lesson.duration_seconds)
-    return position
-
-
-def _update_watched_incremental(session, event_type, position):
-    """Incrementally update actual_watched_seconds without re-reading all events."""
-    if event_type == 'play':
-        session.last_play_position = position
-    elif event_type in ('pause', 'ended', 'page_hidden', 'seek') and session.last_play_position is not None:
-        diff = position - session.last_play_position
-        if diff > 0:
-            session.actual_watched_seconds += diff
-        session.last_play_position = None
-
-
-def _maybe_auto_complete(session, lesson):
-    """Set LessonProgress.is_completed if 80% watched. Returns True if newly completed."""
-    if not lesson.duration_seconds:
-        return False
-    if session.actual_watched_seconds < lesson.duration_seconds * 0.8:
-        return False
-    progress, _ = LessonProgress.objects.get_or_create(user=session.user, lesson=lesson)
-    if not progress.is_completed:
-        progress.is_completed = True
-        progress.save(update_fields=['is_completed'])
-        _update_streak(session.user)
-        _maybe_issue_certificate(session.user, lesson.module.course)
-        return True
-    return False
-
-
-def _handle_session_event(request, lesson, data):
-    """Shared logic for session/event/ and session/beacon/ endpoints."""
-    session = get_object_or_404(
-        VideoSession, id=data.get('session_id'), user=request.user, lesson=lesson
-    )
-
-    event_type = data.get('event_type', '')
-    if event_type not in VALID_EVENT_TYPES:
-        return JsonResponse({'error': 'Invalid event_type'}, status=400)
-
-    try:
-        position = int(data.get('position_seconds', 0))
-    except (TypeError, ValueError):
-        return JsonResponse({'error': 'Invalid position_seconds'}, status=400)
-    position = _clamp_position(position, lesson)
-
-    metadata = data.get('metadata') or {}
-    if len(json.dumps(metadata)) > MAX_METADATA_SIZE:
-        metadata = {}
-
-    if event_type == 'heartbeat':
-        last_event = session.events.order_by('-created_at').first()
-        if last_event:
-            elapsed = (timezone.now() - last_event.created_at).total_seconds()
-            if elapsed < EVENT_RATE_LIMIT_SECONDS:
-                return JsonResponse({'status': 'ok', 'auto_completed': False, 'throttled': True})
-
-    VideoEvent.objects.create(
-        session=session,
-        event_type=event_type,
-        position_seconds=position,
-        metadata=metadata,
-    )
-
-    _update_watched_incremental(session, event_type, position)
-
-    session.last_position_seconds = position
-    session.max_reached_seconds = max(position, session.max_reached_seconds)
-    save_fields = [
-        'actual_watched_seconds', 'last_position_seconds',
-        'max_reached_seconds', 'last_play_position',
-    ]
-    if event_type in ('ended', 'page_hidden'):
-        session.ended_at = timezone.now()
-        save_fields.append('ended_at')
-    session.save(update_fields=save_fields)
-
-    progress, created = LessonProgress.objects.get_or_create(
-        user=request.user, lesson=lesson
-    )
-    if created or session.actual_watched_seconds > progress.watched_seconds:
-        progress.watched_seconds = max(progress.watched_seconds, session.actual_watched_seconds)
-        progress.save(update_fields=['watched_seconds'])
-
-    auto_completed = _maybe_auto_complete(session, lesson)
-    return JsonResponse({'status': 'ok', 'auto_completed': auto_completed})
-
-
-# ---------------------------------------------------------------------------
-# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/session/start/
-# ---------------------------------------------------------------------------
-
-@login_required
-def session_start(request, course_slug, module_slug, lesson_slug):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
-
-    try:
-        data = json.loads(request.body) if request.body else {}
-    except (json.JSONDecodeError, ValueError):
-        data = {}
-
-    duration = data.get('duration_seconds')
-    if duration and not lesson.duration_seconds:
-        lesson.duration_seconds = int(duration)
-        lesson.save(update_fields=['duration_seconds'])
-
-    now = timezone.now()
-    resume_threshold = now - timedelta(minutes=30)
-
-    session = VideoSession.objects.filter(
-        user=request.user, lesson=lesson, ended_at__isnull=True
-    ).first()
-
-    if not session:
-        session = VideoSession.objects.filter(
-            user=request.user, lesson=lesson, ended_at__gte=resume_threshold
-        ).order_by('-ended_at').first()
-        if session:
-            session.ended_at = None
-            session.save(update_fields=['ended_at'])
-        else:
-            session = VideoSession.objects.create(user=request.user, lesson=lesson)
-
-    return JsonResponse({'session_id': session.id, 'last_position': session.last_position_seconds})
-
-
-# ---------------------------------------------------------------------------
-# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/session/event/
-# ---------------------------------------------------------------------------
-
-@login_required
-def session_event(request, course_slug, module_slug, lesson_slug):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
-
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-    return _handle_session_event(request, lesson, data)
-
-
-# ---------------------------------------------------------------------------
-# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/session/beacon/
-# ---------------------------------------------------------------------------
-
-@csrf_exempt
-def session_beacon(request, course_slug, module_slug, lesson_slug):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-    if not request.user.is_authenticated:
-        return JsonResponse({'error': 'Unauthorized'}, status=401)
-
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
-
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid data'}, status=400)
-
-    return _handle_session_event(request, lesson, data)

@@ -62,10 +62,10 @@
     </div>
     <div class="stat-tile">
       <div class="stat-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </div>
-      <div class="stat-num">{{ user_seconds|duration_short }}</div>
-      <div class="stat-lab">Jami ko'rilgan</div>
+      <div class="stat-num">{{ user_lesson_views }}</div>
+      <div class="stat-lab">Dars ko'rishlari</div>
     </div>
   </div>
 
@@ -114,10 +114,10 @@
             {% if day is None %}
               <div class="activity-cell activity-empty"></div>
             {% else %}
-              {% with mins=activity_map|get_item:day %}
-                <div class="activity-cell {% if mins is None %}level-0{% elif mins < 15 %}level-1{% elif mins < 30 %}level-2{% elif mins < 60 %}level-3{% else %}level-4{% endif %}"
+              {% with n=activity_map|get_item:day %}
+                <div class="activity-cell {% if n is None %}level-0{% elif n < 2 %}level-1{% elif n < 3 %}level-2{% elif n < 5 %}level-3{% else %}level-4{% endif %}"
                      data-date="{{ day }}"
-                     data-minutes="{{ mins|default:0 }}">
+                     data-lessons="{{ n|default:0 }}">
                 </div>
               {% endwith %}
             {% endif %}
@@ -192,12 +192,10 @@
   var cells = document.querySelectorAll('.activity-cell[data-date]');
   cells.forEach(function (cell) {
     cell.addEventListener('mouseenter', function () {
-      var minutes = parseInt(cell.dataset.minutes || '0', 10);
+      var lessons = parseInt(cell.dataset.lessons || '0', 10);
       var date = cell.dataset.date;
-      var hasActivity = cell.classList.contains('level-1') || cell.classList.contains('level-2') ||
-                        cell.classList.contains('level-3') || cell.classList.contains('level-4');
-      tooltip.textContent = hasActivity
-        ? date + ' — ' + (minutes > 0 ? minutes + ' daqiqa' : '< 1 daqiqa')
+      tooltip.textContent = lessons > 0
+        ? date + ' — ' + lessons + ' dars'
         : date + ' — faollik yo\'q';
       tooltip.classList.add('visible');
     });

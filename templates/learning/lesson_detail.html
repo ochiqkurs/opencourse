@@ -144,9 +144,7 @@
   "video_id": "{{ lesson.youtube_video_id }}",
   "csrf_token": "{{ csrf_token }}",
   "is_authenticated": {% if user.is_authenticated %}true{% else %}false{% endif %},
-  "url_start": "{% url 'learning:session_start' course.slug module.slug lesson.slug %}",
-  "url_event": "{% url 'learning:session_event' course.slug module.slug lesson.slug %}",
-  "url_beacon": "{% url 'learning:session_beacon' course.slug module.slug lesson.slug %}",
+  "url_record": "{% url 'learning:record_view' course.slug module.slug lesson.slug %}",
   "url_complete": "{% url 'learning:mark_complete' course.slug module.slug lesson.slug %}"
 }
 </script>

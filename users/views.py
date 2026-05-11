@@ -18,9 +18,8 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
-from django.db.models import Sum
 from learning.models import (
-    Course, Module, Lesson, LessonProgress, VideoSession,
+    Course, Module, Lesson, LessonProgress, LessonView,
     Enrollment, Certificate, Category,
 )
 from learning.forms import CourseForm, ModuleForm, LessonForm, CategoryForm
@@ -158,28 +157,23 @@ class ProfileView(LoginRequiredMixin, View):
 
     def _base_context(self, request):
         from datetime import timedelta, date
-        from django.db.models.functions import TruncDate
+        from django.db.models import Count
         from users.models import UserProfile
 
         user = request.user
 
-        user_seconds = (
-            VideoSession.objects.filter(user=user)
-            .aggregate(Sum('actual_watched_seconds'))['actual_watched_seconds__sum'] or 0
-        )
+        user_lesson_views = LessonView.objects.filter(user=user).count()
 
-        # Activity graph — oxirgi 365 kun
+        # Activity graph — last 365 days, counting distinct lessons watched per day.
         since = date.today() - timedelta(days=364)
         raw_activity = (
-            VideoSession.objects
-            .filter(user=user, started_at__date__gte=since)
-            .annotate(day=TruncDate('started_at'))
-            .values('day')
-            .annotate(total_seconds=Sum('actual_watched_seconds'))
-            .values('day', 'total_seconds')
+            LessonView.objects
+            .filter(user=user, viewed_on__gte=since)
+            .values('viewed_on')
+            .annotate(lessons=Count('lesson', distinct=True))
         )
         activity_map = {
-            str(row['day']): row['total_seconds'] // 60
+            str(row['viewed_on']): row['lessons']
             for row in raw_activity
         }
 
@@ -256,7 +250,7 @@ class ProfileView(LoginRequiredMixin, View):
             'form': UserProfileForm(instance=user),
             'is_admin': user.is_staff or user.is_superuser,
             'user': user,
-            'user_seconds': user_seconds,
+            'user_lesson_views': user_lesson_views,
             'user_completed_lessons': LessonProgress.objects.filter(user=user, is_completed=True).count(),
             'has_usable_password': user.has_usable_password(),
             'password_form': PasswordChangeForm(user) if user.has_usable_password() else SetPasswordForm(user),

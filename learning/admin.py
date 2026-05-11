@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Lesson, LessonProgress, Note, Course, Module,
+    Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
 )
 
@@ -41,10 +41,19 @@ class LessonAdmin(admin.ModelAdmin):
 
 @admin.register(LessonProgress)
 class LessonProgressAdmin(admin.ModelAdmin):
-    list_display = ['user', 'lesson', 'is_completed', 'watched_seconds', 'last_watched_at']
+    list_display = ['user', 'lesson', 'is_completed', 'last_watched_at']
     list_filter = ['is_completed']
     search_fields = ['user__username', 'lesson__title']
     readonly_fields = ['last_watched_at']
+
+
+@admin.register(LessonView)
+class LessonViewAdmin(admin.ModelAdmin):
+    list_display = ['user', 'lesson', 'viewed_on', 'first_seen_at']
+    list_filter = ['viewed_on']
+    search_fields = ['user__username', 'lesson__title']
+    date_hierarchy = 'viewed_on'
+    readonly_fields = ['first_seen_at']
 
 
 @admin.register(Note)
