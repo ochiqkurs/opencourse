@@ -61,7 +61,7 @@ urlpatterns = [
         name='save_note',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/koridi/',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/korildi/',
         views.record_view,
         name='record_view',
     ),

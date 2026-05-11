@@ -133,7 +133,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page |
 | `/malaka/<course>/<module>/<lesson>/complete/` | learning | POST: mark complete (manual) |
 | `/malaka/<course>/<module>/<lesson>/note/` | learning | POST: save note (JSON) |
-| `/malaka/<course>/<module>/<lesson>/davom/koridi/` | learning | POST: record a daily LessonView (fired from JS on YT `PLAYING`) |
+| `/malaka/<course>/<module>/<lesson>/davom/korildi/` | learning | POST: record a daily LessonView (fired from JS on YT `PLAYING`) |
 | `/users/login/` | users | Telegram login (token generated) |
 | `/users/signup/` | users | Same flow as login |
 | `/users/profile/` | users | Dashboard (streak, stats, continue learning, certificates) |
@@ -145,7 +145,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 
 URL namespaces: `learning:` and `users:`
 
-URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `koridi` ("watched"). The explicit `qidiruv/`, `kategoriya/<slug>/` etc. **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
+URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `korildi` ("watched"). The explicit `qidiruv/`, `kategoriya/<slug>/` etc. **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
 
 ---
 
@@ -165,7 +165,7 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ## Key Business Logic
 
 ### Lesson View Tracking (simplified — no per-second watch tracking)
-- `lesson_tracker.js` loads the YouTube IFrame API solely to detect the `PLAYING` state. On the first `PLAYING` event per page load it POSTs to `/davom/koridi/` and stops listening — no heartbeats, no beacons, no seek/pause events, no session resume logic.
+- `lesson_tracker.js` loads the YouTube IFrame API solely to detect the `PLAYING` state. On the first `PLAYING` event per page load it POSTs to `/davom/korildi/` and stops listening — no heartbeats, no beacons, no seek/pause events, no session resume logic.
 - The server endpoint (`record_view`) is idempotent: `LessonView.get_or_create(user, lesson, viewed_on=today_uzt)`. Multiple plays on the same day collapse to a single row.
 - Playing a lesson also flips `LessonProgress.is_completed=True` (auto-completion). The manual "Tugatildi" button remains for users who want to mark a lesson done without watching the video.
 - `record_view` also calls `_update_streak()` and `_maybe_issue_certificate()`.
@@ -362,7 +362,7 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 | Category | Top-level taxonomy used to group courses on home / filter bar |
 | Review | A 1–5 star rating + optional comment, one per user per course |
 | davom | Uzbek: "continue" — kept as the URL segment for view recording |
-| koridi | Uzbek: "watched (it)" — endpoint segment that records a daily LessonView |
+| korildi | Uzbek: "was watched" (passive) — URL segment that records a daily LessonView |
 | qidiruv | Uzbek: "search" |
 | kategoriya | Uzbek: "category" |
 | yozilish | Uzbek: "enrollment" |
