@@ -1,73 +1,327 @@
 {% extends "base.html" %}
 {% load learning_extras %}
 
-{% block title %}{{ course.title }} – Ochiq kurs{% endblock %}
+{% block title %}{{ course.title }} – Ochiq Kurs{% endblock %}
 
 {% block content %}
-<div class="course-detail-header">
-  <h1>{{ course.title }}</h1>
-  <div class="course-detail-meta">
-    {% if total_duration %}<span>{{ total_duration|duration }}</span>{% endif %}
-    <span>{{ total_lessons }} dars</span>
-    <span>{{ modules_data|length }} modul</span>
-  </div>
-  {% if course.description %}
-    <p class="description">{{ course.description }}</p>
-  {% endif %}
-
-  {% if next_lesson %}
-    <a
-      href="{% url 'learning:lesson_detail' course.slug next_lesson.module.slug next_lesson.slug %}"
-      class="btn btn-primary course-continue-btn"
-    >Davom etish &rarr;</a>
-  {% endif %}
-</div>
-
-<div class="module-accordion">
-  {% for item in modules_data %}
-  {% with module=item.module lessons=item.lessons percent=item.percent %}
-  <details class="module-block" {% if forloop.first %}open{% endif %}>
-    <summary class="module-summary">
-      <div class="module-summary-left">
-        <span class="module-title">{{ module.title }}</span>
-        {% if module.description %}
-          <span class="module-desc">{{ module.description }}</span>
+<section class="course-hero">
+  <div class="course-hero-inner">
+    <div class="ch-left">
+      <nav class="breadcrumb">
+        <a href="{% url 'home' %}">Bosh sahifa</a>
+        <span class="sep">›</span>
+        <a href="{% url 'learning:course_list' %}">Kurslar</a>
+        {% if course.category %}
+          <span class="sep">›</span>
+          <a href="{% url 'learning:category_detail' course.category.slug %}">{{ course.category.name }}</a>
         {% endif %}
-      </div>
-      <div class="module-summary-right">
-        <div class="module-progress-row">
-          <div class="module-progress-bar">
-            <div class="module-progress-fill" style="width: {{ percent }}%"></div>
-          </div>
-          <span class="module-percent">{{ percent }}%</span>
-        </div>
-        <span class="module-duration">{{ item.total_seconds|duration }}</span>
-      </div>
-    </summary>
+      </nav>
 
-    <ul class="module-lesson-list">
-      {% for lesson in lessons %}
-      <li class="module-lesson-item {% if lesson.progress and lesson.progress.is_completed %}completed{% endif %}">
-        <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">
-          <span class="lesson-status">
-            {% if lesson.progress and lesson.progress.is_completed %}
-              ✓
+      <h1>{{ course.title }}</h1>
+      {% if course.subtitle %}
+        <p class="ch-subtitle">{{ course.subtitle }}</p>
+      {% endif %}
+
+      <div class="ch-meta">
+        {% if course.rating_count %}
+          <span>
+            <span class="meta-num">{{ course.avg_rating|floatformat:1 }}</span>
+            {{ course.avg_rating|stars }}
+            <span style="color:rgba(255,255,255,.65)">({{ course.rating_count }} baho)</span>
+          </span>
+        {% endif %}
+        {% if student_count %}
+          <span><span class="meta-num">{{ student_count }}</span>o'quvchi</span>
+        {% endif %}
+        <span class="badge badge-amber">{{ course.get_level_display }}</span>
+        <span style="color:rgba(255,255,255,.65)">{{ course.language }}</span>
+      </div>
+
+      <div class="ch-instructor">
+        <span class="avatar avatar-sm">{{ course.instructor_display|initials }}</span>
+        <span>O'qituvchi: <strong style="color:#fff">{{ course.instructor_display }}</strong></span>
+      </div>
+    </div>
+
+    <aside class="ch-right">
+      <div class="enroll-card">
+        <div class="ec-thumb">
+          {% with thumb_url=course.get_thumbnail_url %}
+            {% if thumb_url %}<img src="{{ thumb_url }}" alt="">{% endif %}
+          {% endwith %}
+        </div>
+        <div class="ec-body">
+          {% if is_complete %}
+            <div class="completed-badge" style="margin-bottom:14px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Kurs tugatildi
+            </div>
+          {% endif %}
+
+          <div class="ec-cta">
+            {% if next_lesson %}
+              <a href="{% url 'learning:lesson_detail' course.slug next_lesson.module.slug next_lesson.slug %}" class="btn btn-primary btn-lg btn-block">
+                {% if overall_percent > 0 %}Davom etish ({{ overall_percent }}%){% else %}Boshlash{% endif %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              {% if user.is_authenticated and not is_enrolled %}
+                <form action="{% url 'learning:enroll' course.slug %}" method="post" style="margin:0">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-secondary btn-block">Mening kurslarimga qo'shish</button>
+                </form>
+              {% endif %}
             {% else %}
-              {{ forloop.counter }}
+              <a href="#syllabus" class="btn btn-primary btn-lg btn-block">Dastur bilan tanishish</a>
             {% endif %}
-          </span>
-          <span class="lesson-info">
-            <span class="lesson-title">{{ lesson.title }}</span>
-            {% if lesson.duration_seconds %}
-              <span class="lesson-duration">{{ lesson.duration_seconds|duration }}</span>
+
+            {% if has_certificate %}
+              <a href="{% url 'learning:certificate' course.slug %}" class="btn btn-outline-primary btn-block">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                Sertifikatimni ko'rish
+              </a>
             {% endif %}
-          </span>
-        </a>
-      </li>
+          </div>
+
+          <ul class="ec-features">
+            <li>
+              <span class="ec-i"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              {{ total_lessons }} ta video dars
+            </li>
+            <li>
+              <span class="ec-i"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              Umumiy {{ total_duration|duration }}
+            </li>
+            <li>
+              <span class="ec-i"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              Cheksiz kirish
+            </li>
+            <li>
+              <span class="ec-i"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              Tugatish sertifikati
+            </li>
+            <li>
+              <span class="ec-i"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              Eslatma va belgilash imkoniyati
+            </li>
+          </ul>
+
+          <div class="ec-share">
+            <a href="#" aria-label="Telegram" onclick="navigator.share?navigator.share({url:location.href,title:'{{ course.title|escapejs }}'}):null;return false;" title="Ulashish">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </a>
+            <a href="#" onclick="navigator.clipboard.writeText(location.href);alert('Havola nusxalandi');return false;" title="Havolani nusxalash">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<div class="container" data-tabs>
+  <div class="tabs" role="tablist">
+    <button class="active" data-tab="overview" role="tab">Umumiy</button>
+    <button data-tab="syllabus" role="tab">Dastur</button>
+    <button data-tab="reviews" role="tab">Sharhlar ({{ course.rating_count }})</button>
+    <button data-tab="instructor" role="tab">O'qituvchi</button>
+  </div>
+
+  <!-- Overview -->
+  <section class="tab-panel active" data-panel="overview">
+    {% if course.what_you_learn_list %}
+      <div class="learn-card">
+        <h2>Ushbu kursda nimani o'rganasiz</h2>
+        <ul class="learn-grid">
+          {% for item in course.what_you_learn_list %}
+            <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if course.requirements_list %}
+      <div class="learn-card">
+        <h2>Talablar</h2>
+        <ul class="req-list">
+          {% for item in course.requirements_list %}
+            <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if description_html %}
+      <div class="learn-card">
+        <h2>Kurs haqida</h2>
+        <div class="md-content">{{ description_html }}</div>
+      </div>
+    {% endif %}
+  </section>
+
+  <!-- Syllabus -->
+  <section class="tab-panel" data-panel="syllabus" id="syllabus">
+    <h2 style="margin-bottom:8px">Kurs dasturi</h2>
+    <div class="curriculum-summary">
+      <span>{{ modules_data|length }} modul</span><span>·</span>
+      <span>{{ total_lessons }} dars</span><span>·</span>
+      <span>{{ total_duration|duration }}</span>
+    </div>
+
+    <div class="module-accordion">
+      {% for item in modules_data %}
+      {% with module=item.module lessons=item.lessons percent=item.percent %}
+      <details class="module-block" {% if forloop.first %}open{% endif %}>
+        <summary class="module-summary">
+          <div class="module-summary-left">
+            <span class="module-title">{{ forloop.counter }}. {{ module.title }}</span>
+            {% if module.description %}
+              <span class="module-desc">{{ module.description|truncatechars:120 }}</span>
+            {% endif %}
+          </div>
+          <div class="module-summary-right">
+            <div class="module-progress-row">
+              <div class="module-progress-bar">
+                <div class="module-progress-fill" style="width: {{ percent }}%"></div>
+              </div>
+              <span class="module-percent">{{ percent }}%</span>
+            </div>
+            <span class="module-duration">{{ item.total_seconds|duration_short }} · {{ item.total }} dars</span>
+          </div>
+        </summary>
+
+        <ul class="module-lesson-list">
+          {% for lesson in lessons %}
+          <li class="module-lesson-item {% if lesson.progress and lesson.progress.is_completed %}completed{% endif %}">
+            <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">
+              <span class="lesson-status">
+                {% if lesson.progress and lesson.progress.is_completed %}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {% else %}
+                  {{ forloop.counter }}
+                {% endif %}
+              </span>
+              <span class="lesson-info">
+                <span class="lesson-title">{{ lesson.title }}</span>
+                {% if lesson.duration_seconds %}
+                  <span class="lesson-duration">{{ lesson.duration_seconds|lesson_time }}</span>
+                {% endif %}
+              </span>
+              <span style="color:var(--muted)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endwith %}
       {% endfor %}
-    </ul>
-  </details>
-  {% endwith %}
-  {% endfor %}
+    </div>
+  </section>
+
+  <!-- Reviews -->
+  <section class="tab-panel" data-panel="reviews">
+    <h2 style="margin-bottom:8px">O'quvchilar fikrlari</h2>
+
+    {% if course.rating_count %}
+      <div class="review-summary">
+        <div class="review-score">
+          <div class="big">{{ course.avg_rating|floatformat:1 }}</div>
+          <div class="stars-glyphs">{{ course.avg_rating|stars }}</div>
+          <div class="rscount">{{ course.rating_count }} ta baho</div>
+        </div>
+        <div class="review-bars">
+          {% for row in rating_breakdown %}
+            <div class="review-bar">
+              <span class="label">{{ row.star }}★</span>
+              <div class="track"><div class="fill" style="width: {{ row.percent }}%"></div></div>
+              <span style="min-width:40px;text-align:right">{{ row.count }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted">Hozircha sharhlar yo'q. Birinchi bo'ling!</p>
+    {% endif %}
+
+    {% if user.is_authenticated %}
+      <div class="review-form-wrap">
+        <h3>{% if user_review %}Sizning sharhingiz{% else %}O'z sharhingizni qoldiring{% endif %}</h3>
+        <form action="{% url 'learning:submit_review' course.slug %}" method="post">
+          {% csrf_token %}
+          <div class="form-row">
+            <label>Baho</label>
+            <div class="star-input">
+              {% for i in "54321" %}
+                <input type="radio" name="rating" id="star-{{ i }}" value="{{ i }}"
+                  {% if user_review and user_review.rating|stringformat:"s" == i %}checked{% endif %}>
+                <label for="star-{{ i }}" title="{{ i }} yulduz">★</label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="id_comment">Izoh</label>
+            <textarea name="comment" id="id_comment" class="review-textarea" rows="4" placeholder="Kurs haqida fikringizni yozing...">{% if user_review %}{{ user_review.comment }}{% endif %}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">{% if user_review %}Yangilash{% else %}Yuborish{% endif %}</button>
+        </form>
+      </div>
+    {% else %}
+      <p class="text-muted"><a href="{% url 'users:login' %}">Kiring</a>, va o'z sharhingizni qoldiring.</p>
+    {% endif %}
+
+    {% if reviews %}
+      <div class="review-list">
+        {% for r in reviews %}
+          <div class="review">
+            <span class="avatar avatar-sm">{{ r.user.first_name|default:r.user.username|slice:":1"|upper }}</span>
+            <div>
+              <div class="review-head">
+                <span class="review-name">{{ r.user.first_name|default:r.user.username }}</span>
+                <span class="stars-glyphs">{{ r.rating|stars }}</span>
+                <span class="review-date">· {{ r.created_at|date:"d M Y" }}</span>
+              </div>
+              {% if r.comment %}<p class="review-text">{{ r.comment }}</p>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <!-- Instructor -->
+  <section class="tab-panel" data-panel="instructor">
+    <div class="learn-card">
+      <div style="display:flex;gap:18px;align-items:center;margin-bottom:14px">
+        <span class="avatar avatar-lg">{{ course.instructor_display|initials }}</span>
+        <div>
+          <h2 style="margin:0 0 4px">{{ course.instructor_display }}</h2>
+          <div class="text-muted">{{ course.category.name|default:"Mutaxassis" }} · Ochiq Kurs jamoasi</div>
+        </div>
+      </div>
+      <p class="md-content">{{ course.instructor_bio|default:"Tajribali mutaxassis va o'qituvchi. O'z bilimini boshqalar bilan baham ko'rishni yaxshi ko'radi va har bir o'quvchi uchun aniq, tushunarli yo'l-yo'riq taqdim etadi." }}</p>
+    </div>
+  </section>
 </div>
+
+<script>
+(function() {
+  var wrap = document.querySelector('[data-tabs]');
+  if (!wrap) return;
+  var btns = wrap.querySelectorAll('.tabs button');
+  var panels = wrap.querySelectorAll('.tab-panel');
+  function activate(name) {
+    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.tab === name); });
+    panels.forEach(function(p){ p.classList.toggle('active', p.dataset.panel === name); });
+    if (history.replaceState) history.replaceState(null, '', '#' + name);
+  }
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){ activate(b.dataset.tab); });
+  });
+  if (location.hash && wrap.querySelector('[data-panel="' + location.hash.slice(1) + '"]')) {
+    activate(location.hash.slice(1));
+  }
+})();
+</script>
 {% endblock %}

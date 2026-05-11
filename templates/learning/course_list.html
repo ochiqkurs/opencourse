@@ -1,40 +1,60 @@
 {% extends "base.html" %}
 {% load learning_extras %}
 
-{% block title %}Malakalar – Ochiq kurs{% endblock %}
+{% block title %}Kurslar – Ochiq Kurs{% endblock %}
 
 {% block content %}
-<h1>Malakalar</h1>
-<p class="description">O'rganmoqchi bo'lgan mavzuni tanlang.</p>
+<div class="container" style="padding-top:8px">
+  <h1>Barcha kurslar</h1>
+  <p class="description">
+    {% if q %}
+      "<strong>{{ q }}</strong>" so'roviga {{ courses|length }} ta natija topildi.
+    {% elif active_category %}
+      <strong>{{ active_category.name }}</strong> kategoriyasidagi kurslar.
+    {% else %}
+      Sizga mos kursni tanlang va o'rganishni boshlang.
+    {% endif %}
+  </p>
 
-{% if courses %}
-  <div class="home-card-grid">
-    {% for course in courses %}
-    <a class="course-card" href="{% url 'learning:course_detail' course.slug %}">
-      <div class="course-card-thumb">
-        {% with thumb_url=course.get_thumbnail_url %}
-          {% if thumb_url %}
-            <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
-          {% else %}
-            <div class="course-card-thumb-placeholder">
-              <span>{{ course.title|truncatechars:1 }}</span>
-            </div>
-          {% endif %}
-        {% endwith %}
-      </div>
-      <div class="course-card-body">
-        <h3 class="course-card-title">{{ course.title }}</h3>
-        <div class="course-card-meta">
-          <span>{{ course.lesson_count }} dars</span>
-          {% if course.total_duration %}
-            <span>{{ course.total_duration|duration }}</span>
-          {% endif %}
-        </div>
-      </div>
-    </a>
+  <form class="filter-toolbar" method="get" id="filter-form">
+    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+
+    <span class="filter-label">Kategoriya:</span>
+    <a class="chip {% if not active_category %}active{% endif %}" href="?{% if q %}q={{ q }}{% endif %}">Barchasi</a>
+    {% for cat in categories %}
+      <a class="chip {% if active_category and active_category.slug == cat.slug %}active{% endif %}"
+         href="?kategoriya={{ cat.slug }}{% if q %}&q={{ q }}{% endif %}">{{ cat.name }}</a>
     {% endfor %}
-  </div>
-{% else %}
-  <p class="empty-message">Hali malakalar qo'shilmagan.</p>
-{% endif %}
+
+    <span class="filter-label" style="margin-left:12px">Daraja:</span>
+    <a class="chip {% if not active_level %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}">Barchasi</a>
+    {% for code, label in level_choices %}
+      <a class="chip {% if active_level == code %}active{% endif %}"
+         href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}daraja={{ code }}{% if q %}&q={{ q }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+
+    <select class="sort-select" name="saralash" onchange="this.form.submit()">
+      <option value="popular" {% if active_sort == 'popular' %}selected{% endif %}>Mashhur</option>
+      <option value="new" {% if active_sort == 'new' %}selected{% endif %}>Yangi</option>
+      <option value="rating" {% if active_sort == 'rating' %}selected{% endif %}>Yuqori reyting</option>
+    </select>
+  </form>
+
+  {% if courses %}
+    <div class="card-grid">
+      {% for course in courses %}
+        {% include "learning/_course_card.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="es-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </div>
+      <h3>Hech narsa topilmadi</h3>
+      <p>Sizning so'rovingizga mos kurs topilmadi. Filtrlarni o'zgartirib ko'ring.</p>
+      <a href="{% url 'learning:course_list' %}" class="btn btn-secondary">Barcha kurslar</a>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -1,0 +1,42 @@
+{% load learning_extras %}
+<a class="course-card" href="{% url 'learning:course_detail' course.slug %}">
+  <div class="course-card-thumb">
+    {% with thumb_url=course.get_thumbnail_url %}
+      {% if thumb_url %}
+        <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
+      {% else %}
+        <div class="course-card-thumb-placeholder">
+          <span>{{ course.title|truncatechars:1 }}</span>
+        </div>
+      {% endif %}
+    {% endwith %}
+    <div class="play-icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    </div>
+    {% if course.is_featured %}
+      <span class="course-card-badge featured">★ Tavsiya</span>
+    {% endif %}
+  </div>
+  <div class="course-card-body">
+    {% if course.category %}
+      <div class="course-card-cat">{{ course.category.name }}</div>
+    {% endif %}
+    <h3 class="course-card-title">{{ course.title }}</h3>
+    <div class="course-card-instructor">{{ course.instructor_display }}</div>
+    {% if course.rating_count %}
+      <div class="course-card-rating">
+        <span class="num">{{ course.avg_rating|floatformat:1 }}</span>
+        {{ course.avg_rating|stars }}
+        <span class="rcount">({{ course.rating_count }})</span>
+      </div>
+    {% endif %}
+    <div class="course-card-meta">
+      {% if course.lesson_count %}<span>{{ course.lesson_count }} dars</span>{% endif %}
+      {% if course.total_duration %}<span class="dot"></span><span>{{ course.total_duration|duration_short }}</span>{% endif %}
+      {% if course.student_count %}<span class="dot"></span><span>{{ course.student_count }} o'quvchi</span>{% endif %}
+    </div>
+    <div class="course-card-bottom">
+      <span class="course-card-level">{{ course.get_level_display }}</span>
+    </div>
+  </div>
+</a>

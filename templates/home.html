@@ -1,53 +1,225 @@
 {% extends 'base.html' %}
 {% load learning_extras %}
+{% load static %}
 
-{% block title %}Ochiq kurs{% endblock %}
+{% block title %}Ochiq Kurs — O'zbekcha onlayn ta'lim platformasi{% endblock %}
 
 {% block content %}
-  <section class="hero">
-    <div class="hero-inner">
-      <h1 class="hero-title">Ochiq kurs bilan yangi malakalarga ega bo'ling</h1>
-      <p class="hero-subtitle"></p>
-      <a href="{% url 'learning:course_list' %}" class="hero-cta">Malakalarga o'tish &rarr;</a>
-      <p class="hero-stats">
-        {{ total_hours }} soat
-        <span class="hero-stats-sep">|</span>
-        {{ total_users }} o'quvchi
-        <span class="hero-stats-sep">|</span>
-        {{ total_lessons }} dars
-      </p>
-    </div>
-  </section>
 
-  {% if courses %}
-  <section class="home-skills">
-    <h2 class="home-section-title">Mavjud Malakalar</h2>
-    <div class="home-card-grid">
-      {% for course in courses %}
-      <a class="course-card" href="{% url 'learning:course_detail' course.slug %}">
-        <div class="course-card-thumb">
-          {% with thumb_url=course.get_thumbnail_url %}
-            {% if thumb_url %}
-              <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
-            {% else %}
-              <div class="course-card-thumb-placeholder">
-                <span>{{ course.title|truncatechars:1 }}</span>
-              </div>
-            {% endif %}
-          {% endwith %}
+<!-- ── Hero ─────────────────────────────────────────────── -->
+<section class="hero-modern">
+  <div class="hero-inner">
+    <div class="hero-content">
+      <span class="hero-eyebrow"><span class="dot"></span> O'zbekistondagi #1 ochiq ta'lim platforma</span>
+      <h1 class="hero-title">
+        Yangi malakalarni <span class="accent">o'zbek tilida</span> o'rganing
+      </h1>
+      <p class="hero-subtitle">
+        Yetuk mutaxassislardan tayyorlangan video kurslar. Bepul ro'yxatdan o'ting va bugundan boshlab o'sib boring — dasturlash, dizayn, biznes va boshqalar.
+      </p>
+      <div class="hero-actions">
+        <a href="{% url 'learning:course_list' %}" class="btn btn-primary btn-lg">
+          Kurslarni ko'rish
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        {% if not user.is_authenticated %}
+          <a href="{% url 'users:signup' %}" class="btn btn-secondary btn-lg">Bepul ro'yxatdan o'tish</a>
+        {% else %}
+          <a href="{% url 'users:profile' %}" class="btn btn-secondary btn-lg">Boshqaruv panelim</a>
+        {% endif %}
+      </div>
+      <div class="hero-stats-row">
+        <div class="hero-stat"><div class="num">{{ total_courses }}+</div><div class="lab">Kurs</div></div>
+        <div class="hero-stat"><div class="num">{{ total_lessons }}+</div><div class="lab">Video dars</div></div>
+        <div class="hero-stat"><div class="num">{{ total_hours }}+</div><div class="lab">Soat ko'rilgan</div></div>
+        <div class="hero-stat"><div class="num">{{ total_users }}+</div><div class="lab">O'quvchi</div></div>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+      <div class="hv-illus"></div>
+      <div class="float-card float-1">
+        <div class="icon-bubble">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         </div>
-        <div class="course-card-body">
-          <h3 class="course-card-title">{{ course.title }}</h3>
-          <div class="course-card-meta">
-            <span>{{ course.lesson_count }} dars</span>
-            {% if course.total_duration %}
-              <span>{{ course.total_duration|duration }}</span>
-            {% endif %}
+        <div>
+          <div class="fc-title">Python asoslari</div>
+          <div class="fc-sub">12 modul · 84 dars</div>
+        </div>
+      </div>
+      <div class="float-card float-2">
+        <div class="icon-bubble" style="background:#FFFBEB;color:#D97706">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <div>
+          <div class="fc-title">4.8 · 1.2k baho</div>
+          <div class="fc-sub">Sevimli kurslar</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Categories ───────────────────────────────────────── -->
+{% if categories %}
+<section class="section section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Kategoriyalar</h2>
+        <p class="section-sub">Sizga qiziq bo'lgan yo'nalishni tanlang.</p>
+      </div>
+    </div>
+    <div class="category-grid">
+      {% for cat in categories %}
+        <a class="cat-card" href="{% url 'learning:category_detail' cat.slug %}">
+          <div class="c-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
           </div>
-        </div>
-      </a>
+          <div class="c-name">{{ cat.name }}</div>
+          <div class="c-meta">{{ cat.c }} kurs</div>
+        </a>
       {% endfor %}
     </div>
-  </section>
-  {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── Featured courses ─────────────────────────────────── -->
+{% if featured %}
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Mashhur kurslar</h2>
+        <p class="section-sub">O'quvchilar tomonidan eng ko'p tanlangan kurslar.</p>
+      </div>
+      <a class="section-link" href="{% url 'learning:course_list' %}">
+        Barchasi <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+    <div class="card-grid">
+      {% for course in featured %}
+        {% include "learning/_course_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ── Why us ───────────────────────────────────────────── -->
+<section class="section section-tight" style="background:var(--bg-soft)">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Nima uchun Ochiq Kurs?</h2>
+        <p class="section-sub">Sifatli ta'lim har kim uchun ochiq bo'lishi kerak.</p>
+      </div>
+    </div>
+    <div class="feature-row">
+      <div class="feature">
+        <div class="f-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1"/></svg>
+        </div>
+        <h3>O'zbek tilida</h3>
+        <p>Barcha darslar ona tilingizda — tushuntirishlar, misollar va matnlar ham.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-6 0v4"/><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/></svg>
+        </div>
+        <h3>Butunlay bepul</h3>
+        <p>Yashirin to'lovlar yo'q. Ro'yxatdan o'ting va istalgan kursni o'rganishni boshlang.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        </div>
+        <h3>Tugatish sertifikati</h3>
+        <p>Kursni tugatgach, professional ko'rinishdagi sertifikatingizni yuklab oling.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 12v5"/><path d="M11 7v10"/><path d="M15 10v7"/><path d="M19 5v12"/></svg>
+        </div>
+        <h3>O'sishni kuzating</h3>
+        <p>Streak, faollik grafigi va statistikalar bilan o'qish odatini mustahkamlang.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Available courses ────────────────────────────────── -->
+{% if courses %}
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Barcha mavjud kurslar</h2>
+        <p class="section-sub">Hozirda mavjud bo'lgan barcha kurslarning to'liq ro'yxati.</p>
+      </div>
+      <a class="section-link" href="{% url 'learning:course_list' %}">
+        Filtrlash <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      </a>
+    </div>
+    <div class="card-grid">
+      {% for course in courses|slice:":8" %}
+        {% include "learning/_course_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ── Testimonials ─────────────────────────────────────── -->
+{% if latest_reviews %}
+<section class="section section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>O'quvchilarimiz fikri</h2>
+        <p class="section-sub">Ochiq Kurs orqali yangi malakalarga ega bo'lganlar.</p>
+      </div>
+    </div>
+    <div class="testi-grid">
+      {% for r in latest_reviews %}
+      <div class="testi">
+        <div class="testi-rating">{{ r.rating|stars }}</div>
+        <p class="testi-quote">"{{ r.comment|truncatechars:200 }}"</p>
+        <div class="testi-user">
+          <span class="avatar avatar-sm">{{ r.user.first_name|default:r.user.username|slice:":1"|upper }}</span>
+          <div>
+            <div class="name">{{ r.user.first_name|default:r.user.username }}</div>
+            <div class="course">{{ r.course.title }}</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ── CTA ──────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="cta-banner">
+      <div>
+        <h2>Bilim olishni bugundan boshlang</h2>
+        <p>Bepul ro'yxatdan o'ting, kuningizdagi 30 daqiqani biror kursga ajrating va orzuingizdagi karyerangizga bir qadam yaqinlashing.</p>
+      </div>
+      <div class="cta-actions">
+        {% if user.is_authenticated %}
+          <a href="{% url 'learning:course_list' %}" class="btn btn-white btn-lg">Kurslarni ko'rish</a>
+        {% else %}
+          <a href="{% url 'users:signup' %}" class="btn btn-white btn-lg">Bepul boshlash</a>
+          <a href="{% url 'learning:course_list' %}" class="btn btn-ghost btn-lg" style="color:#fff;border-color:rgba(255,255,255,.4)">Kurslarni ko'rish</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
 {% endblock %}

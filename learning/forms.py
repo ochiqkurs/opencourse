@@ -1,14 +1,22 @@
 from django import forms
 from django.utils.text import slugify
-from .models import Course, Module, Lesson
+from .models import Course, Module, Lesson, CourseReview, Category
 
 
 class CourseForm(forms.ModelForm):
     class Meta:
         model = Course
-        fields = ['title', 'slug', 'description', 'thumbnail', 'order']
+        fields = [
+            'title', 'slug', 'subtitle', 'description', 'thumbnail',
+            'category', 'level', 'language', 'instructor_name',
+            'instructor_bio', 'what_you_learn', 'requirements',
+            'is_featured', 'order',
+        ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
+            'instructor_bio': forms.Textarea(attrs={'rows': 2}),
+            'what_you_learn': forms.Textarea(attrs={'rows': 4, 'placeholder': "Bir qatorga bitta band"}),
+            'requirements': forms.Textarea(attrs={'rows': 3, 'placeholder': "Bir qatorga bitta talab"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -44,7 +52,7 @@ class ModuleForm(forms.ModelForm):
 class LessonForm(forms.ModelForm):
     class Meta:
         model = Lesson
-        fields = ['title', 'slug', 'description', 'module', 'youtube_video_id', 'order']
+        fields = ['title', 'slug', 'description', 'module', 'youtube_video_id', 'is_preview', 'order']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
         }
@@ -58,3 +66,37 @@ class LessonForm(forms.ModelForm):
         if not cleaned_data.get('slug') and cleaned_data.get('title'):
             cleaned_data['slug'] = slugify(cleaned_data['title'])
         return cleaned_data
+
+
+class CategoryForm(forms.ModelForm):
+    class Meta:
+        model = Category
+        fields = ['name', 'slug', 'description', 'icon', 'color', 'order']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['slug'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get('slug') and cleaned_data.get('name'):
+            cleaned_data['slug'] = slugify(cleaned_data['name'])
+        return cleaned_data
+
+
+class CourseReviewForm(forms.ModelForm):
+    rating = forms.IntegerField(
+        min_value=1, max_value=5,
+        widget=forms.HiddenInput(),
+    )
+
+    class Meta:
+        model = CourseReview
+        fields = ['rating', 'comment']
+        widgets = {
+            'comment': forms.Textarea(attrs={
+                'rows': 4,
+                'placeholder': "Kurs haqida fikringizni yozing...",
+                'class': 'review-textarea',
+            }),
+        }

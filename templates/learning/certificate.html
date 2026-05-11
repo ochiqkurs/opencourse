@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}Sertifikat – {{ course.title }}{% endblock %}
+
+{% block content %}
+<div class="certificate-page">
+  <div class="cert-paper">
+    <div class="cert-logo">O</div>
+    <div class="cert-eyebrow">Ochiq Kurs · Tugatish sertifikati</div>
+    <h1 class="cert-h1">Tugatish guvohnomasi</h1>
+
+    <p class="cert-body">Quyidagi shaxsga ushbu kursni muvaffaqiyatli tamomlagani uchun ushbu sertifikat taqdim etiladi:</p>
+
+    <div class="cert-name">{{ full_name }}</div>
+
+    <p class="cert-body">
+      <span class="cert-course-name">{{ course.title }}</span> kursini to'liq tamomlab,
+      barcha darslarni o'zlashtirgani uchun.
+    </p>
+
+    <div class="cert-meta-row">
+      <div class="signature">
+        <div class="sig-line">Ochiq Kurs jamoasi</div>
+      </div>
+      <div class="verify">
+        <div class="code">#{{ certificate.code }}</div>
+        <div class="small">Berilgan sana: {{ certificate.issued_at|date:"d M Y" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cert-actions">
+    <button class="btn btn-primary" onclick="window.print()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+      Yuklab olish / Chop etish
+    </button>
+    <a href="{% url 'learning:course_detail' course.slug %}" class="btn btn-secondary">Kursga qaytish</a>
+  </div>
+</div>
+{% endblock %}

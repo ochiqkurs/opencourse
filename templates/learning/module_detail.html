@@ -1,34 +1,57 @@
 {% extends "base.html" %}
+{% load learning_extras %}
 
-{% block title %}{{ module.title }} – Ochiq kurs{% endblock %}
+{% block title %}{{ module.title }} – {{ course.title }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb">
-  <a href="{% url 'learning:course_detail' course.slug %}">{{ course.title }}</a>
-  &rsaquo; {{ module.title }}
-</nav>
+<div class="container" style="padding-top:8px">
+  <nav class="breadcrumb">
+    <a href="{% url 'home' %}">Bosh sahifa</a>
+    <span class="sep">›</span>
+    <a href="{% url 'learning:course_list' %}">Kurslar</a>
+    <span class="sep">›</span>
+    <a href="{% url 'learning:course_detail' course.slug %}">{{ course.title }}</a>
+    <span class="sep">›</span>
+    <span>{{ module.title }}</span>
+  </nav>
 
-<h1>{{ module.title }}</h1>
-{% if module.description %}
-  <p class="description">{{ module.description }}</p>
-{% endif %}
+  <h1>{{ module.title }}</h1>
+  {% if module_description_html %}
+    <div class="md-content" style="margin-bottom:24px">{{ module_description_html }}</div>
+  {% endif %}
 
-{% if lessons %}
-<ul class="lesson-list">
-  {% for lesson in lessons %}
-  <li class="lesson-item {% if lesson.progress and lesson.progress.is_completed %}completed{% endif %}">
-    <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">
-      {% if lesson.progress and lesson.progress.is_completed %}
-        <span class="check">&#10003;</span>
-      {% else %}
-        <span class="lesson-number">{{ forloop.counter }}</span>
-      {% endif %}
-      {{ lesson.title }}
-    </a>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}
-  <p class="empty-message">No lessons yet. Check back soon.</p>
-{% endif %}
+  {% if lessons %}
+    <div class="module-block" style="margin-top:24px">
+      <ul class="module-lesson-list" style="padding:8px 16px 16px">
+        {% for lesson in lessons %}
+        <li class="module-lesson-item {% if lesson.progress and lesson.progress.is_completed %}completed{% endif %}">
+          <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">
+            <span class="lesson-status">
+              {% if lesson.progress and lesson.progress.is_completed %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              {% else %}
+                {{ forloop.counter }}
+              {% endif %}
+            </span>
+            <span class="lesson-info">
+              <span class="lesson-title">{{ lesson.title }}</span>
+              {% if lesson.duration_seconds %}
+                <span class="lesson-duration">{{ lesson.duration_seconds|lesson_time }}</span>
+              {% endif %}
+            </span>
+            <span style="color:var(--muted)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>Darslar hali qo'shilmagan</h3>
+      <p>Bu modulda hozircha darslar mavjud emas.</p>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

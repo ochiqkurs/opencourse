@@ -5,20 +5,34 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-# from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Sum
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.db.models import Count, Sum, Q, Avg
+from django.http import JsonResponse, Http404
+from django.shortcuts import get_object_or_404, render, redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Lesson, LessonProgress, Note, Course, Module, VideoEvent, VideoSession
+from .models import (
+    Lesson, LessonProgress, Note, Course, Module, VideoEvent, VideoSession,
+    Category, Enrollment, CourseReview, Certificate,
+)
+from .forms import CourseReviewForm
 from .utils import render_markdown
 
 User = get_user_model()
 UZT = pytz.timezone('Asia/Tashkent')  # UTC+5
+
+
+def _course_card_annotations(qs):
+    return qs.annotate(
+        lesson_count=Count('modules__lessons', distinct=True),
+        total_duration=Sum('modules__lessons__duration_seconds'),
+        student_count=Count('enrollments', distinct=True),
+    )
+
 
 # ---------------------------------------------------------------------------
 # / (home page — public)
@@ -28,10 +42,14 @@ class HomeView(View):
     template_name = 'home.html'
 
     def get(self, request):
-        courses = Course.objects.annotate(
-            lesson_count=Count('modules__lessons'),
-            total_duration=Sum('modules__lessons__duration_seconds'),
-        )
+        courses = _course_card_annotations(
+            Course.objects.select_related('category')
+        ).order_by('-is_featured', 'order')
+
+        featured = [c for c in courses if c.is_featured][:6]
+        if not featured:
+            featured = list(courses[:6])
+
         total_seconds = (
             VideoSession.objects.aggregate(Sum('actual_watched_seconds'))
             ['actual_watched_seconds__sum'] or 0
@@ -39,11 +57,28 @@ class HomeView(View):
         total_hours = round(total_seconds / 3600)
         total_users = User.objects.filter(is_active=True).count()
         total_lessons = Lesson.objects.count()
+        total_courses = Course.objects.count()
+
+        categories = list(
+            Category.objects.annotate(c=Count('courses')).order_by('order', 'name')
+        )
+
+        latest_reviews = list(
+            CourseReview.objects
+            .select_related('user', 'course')
+            .exclude(comment='')
+            .order_by('-created_at')[:6]
+        )
+
         return render(request, self.template_name, {
-            'courses': courses,
+            'courses': list(courses),
+            'featured': featured,
+            'categories': categories,
             'total_hours': total_hours,
             'total_users': total_users,
             'total_lessons': total_lessons,
+            'total_courses': total_courses,
+            'latest_reviews': latest_reviews,
         })
 
 
@@ -55,12 +90,112 @@ class CourseListView(View):
     template_name = 'learning/course_list.html'
 
     def get(self, request):
-        courses = Course.objects.annotate(
-            lesson_count=Count('modules__lessons'),
-            total_duration=Sum('modules__lessons__duration_seconds'),
+        qs = _course_card_annotations(
+            Course.objects.select_related('category')
         )
+
+        category_slug = request.GET.get('kategoriya', '').strip()
+        level = request.GET.get('daraja', '').strip()
+        sort = request.GET.get('saralash', 'popular')
+        q = request.GET.get('q', '').strip()
+
+        if category_slug:
+            qs = qs.filter(category__slug=category_slug)
+        if level and level in dict(Course.LEVEL_CHOICES):
+            qs = qs.filter(level=level)
+        if q:
+            qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(subtitle__icontains=q))
+
+        if sort == 'new':
+            qs = qs.order_by('-id')
+        elif sort == 'rating':
+            qs = qs.order_by('-avg_rating', '-rating_count')
+        else:  # popular
+            qs = qs.order_by('-student_count', 'order')
+
+        categories = list(Category.objects.order_by('order', 'name'))
+        active_category = None
+        if category_slug:
+            active_category = next((c for c in categories if c.slug == category_slug), None)
+
         return render(request, self.template_name, {
+            'courses': list(qs),
+            'categories': categories,
+            'active_category': active_category,
+            'active_level': level,
+            'active_sort': sort,
+            'q': q,
+            'level_choices': Course.LEVEL_CHOICES,
+        })
+
+
+# ---------------------------------------------------------------------------
+# /malaka/kategoriya/<slug>/
+# ---------------------------------------------------------------------------
+
+class CategoryDetailView(View):
+    template_name = 'learning/category_detail.html'
+
+    def get(self, request, slug):
+        category = get_object_or_404(Category, slug=slug)
+        courses = _course_card_annotations(
+            Course.objects.filter(category=category).select_related('category')
+        ).order_by('order')
+        categories = list(Category.objects.order_by('order', 'name'))
+        return render(request, self.template_name, {
+            'category': category,
+            'courses': list(courses),
+            'categories': categories,
+        })
+
+
+# ---------------------------------------------------------------------------
+# /malaka/qidiruv/?q=...
+# ---------------------------------------------------------------------------
+
+class SearchView(View):
+    template_name = 'learning/search_results.html'
+
+    def get(self, request):
+        q = request.GET.get('q', '').strip()
+        courses = []
+        lessons = []
+        if q:
+            courses = list(_course_card_annotations(
+                Course.objects.filter(
+                    Q(title__icontains=q) | Q(description__icontains=q) | Q(subtitle__icontains=q)
+                ).select_related('category')
+            )[:20])
+            lessons = list(
+                Lesson.objects.filter(
+                    Q(title__icontains=q) | Q(description__icontains=q)
+                ).select_related('module__course')[:20]
+            )
+
+        if request.GET.get('format') == 'json':
+            return JsonResponse({
+                'courses': [
+                    {
+                        'title': c.title,
+                        'slug': c.slug,
+                        'url': reverse('learning:course_detail', args=[c.slug]),
+                        'category': c.category.name if c.category else '',
+                        'thumb': c.get_thumbnail_url() or '',
+                    } for c in courses[:6]
+                ],
+                'lessons': [
+                    {
+                        'title': l.title,
+                        'course': l.module.course.title,
+                        'url': reverse('learning:lesson_detail', args=[l.module.course.slug, l.module.slug, l.slug]),
+                    } for l in lessons[:6]
+                ],
+            })
+
+        return render(request, self.template_name, {
+            'q': q,
             'courses': courses,
+            'lessons': lessons,
         })
 
 
@@ -72,15 +207,17 @@ class CourseDetailView(View):
     template_name = 'learning/course_detail.html'
 
     def get(self, request, course_slug):
-        course = get_object_or_404(Course, slug=course_slug)
+        course = get_object_or_404(
+            Course.objects.select_related('category', 'instructor'),
+            slug=course_slug,
+        )
         modules = list(
             course.modules
             .prefetch_related('lessons')
             .order_by('order')
         )
 
-        # Build per-module progress data
-        next_lesson = None  # first incomplete lesson across all modules
+        next_lesson = None
         modules_data = []
 
         if request.user.is_authenticated:
@@ -96,8 +233,14 @@ class CourseDetailView(View):
                     lesson_id__in=all_lesson_ids,
                 )
             }
+            is_enrolled = Enrollment.objects.filter(user=request.user, course=course).exists()
+            user_review = CourseReview.objects.filter(user=request.user, course=course).first()
+            has_certificate = Certificate.objects.filter(user=request.user, course=course).exists()
         else:
             progress_map = {}
+            is_enrolled = False
+            user_review = None
+            has_certificate = False
 
         for module in modules:
             lessons = list(module.lessons.order_by('order'))
@@ -122,9 +265,31 @@ class CourseDetailView(View):
                 'total_seconds': total_seconds,
             })
 
-        # Total course stats
         total_lessons = sum(m['total'] for m in modules_data)
         total_duration = sum(m['total_seconds'] for m in modules_data)
+        total_completed = sum(m['completed'] for m in modules_data)
+        overall_percent = int(total_completed / total_lessons * 100) if total_lessons else 0
+        is_complete = total_lessons > 0 and total_completed == total_lessons
+
+        # Auto-issue certificate
+        if is_complete and request.user.is_authenticated and not has_certificate:
+            Certificate.objects.get_or_create(user=request.user, course=course)
+            has_certificate = True
+
+        reviews = list(
+            course.reviews.select_related('user', 'user__telegram_profile')
+            .order_by('-created_at')[:20]
+        )
+
+        student_count = Enrollment.objects.filter(course=course).count()
+
+        rating_breakdown = []
+        if course.rating_count:
+            counts = {r['rating']: r['c'] for r in course.reviews.values('rating').annotate(c=Count('id'))}
+            for star in range(5, 0, -1):
+                c = counts.get(star, 0)
+                pct = int((c / course.rating_count) * 100) if course.rating_count else 0
+                rating_breakdown.append({'star': star, 'count': c, 'percent': pct})
 
         ctx = {
             'course': course,
@@ -132,6 +297,16 @@ class CourseDetailView(View):
             'next_lesson': next_lesson,
             'total_lessons': total_lessons,
             'total_duration': total_duration,
+            'overall_percent': overall_percent,
+            'is_complete': is_complete,
+            'is_enrolled': is_enrolled,
+            'has_certificate': has_certificate,
+            'reviews': reviews,
+            'review_form': CourseReviewForm(instance=user_review),
+            'user_review': user_review,
+            'student_count': student_count,
+            'rating_breakdown': rating_breakdown,
+            'description_html': mark_safe(render_markdown(course.description)) if course.description else '',
         }
         return render(request, self.template_name, ctx)
 
@@ -168,6 +343,7 @@ class ModuleDetailView(View):
             'course': course,
             'module': module,
             'lessons': lessons,
+            'module_description_html': mark_safe(render_markdown(module.description)) if module.description else '',
         }
         return render(request, self.template_name, ctx)
 
@@ -189,6 +365,8 @@ class LessonDetailView(View):
                 user=request.user, lesson=lesson
             ).first()
             note = Note.objects.filter(user=request.user, lesson=lesson).first()
+            # Auto-enroll on first visit
+            Enrollment.objects.get_or_create(user=request.user, course=course)
         else:
             progress = None
             note = None
@@ -200,7 +378,32 @@ class LessonDetailView(View):
         prev_lesson = sibling_lessons[current_index - 1] if current_index and current_index > 0 else None
         next_lesson = sibling_lessons[current_index + 1] if current_index is not None and current_index < len(sibling_lessons) - 1 else None
 
+        # cross-module next/prev (if current is last/first within module)
+        if not next_lesson:
+            next_module = course.modules.filter(order__gt=module.order).order_by('order').first()
+            if next_module:
+                nl = next_module.lessons.order_by('order').first()
+                if nl:
+                    next_lesson = nl
+        if not prev_lesson:
+            prev_module = course.modules.filter(order__lt=module.order).order_by('-order').first()
+            if prev_module:
+                pl = prev_module.lessons.order_by('-order').first()
+                if pl:
+                    prev_lesson = pl
+
         sidebar_modules = course.modules.prefetch_related('lessons').order_by('order')
+
+        # Mark completed lessons in sidebar
+        if request.user.is_authenticated:
+            all_ids = list(Lesson.objects.filter(module__course=course).values_list('id', flat=True))
+            done_ids = set(
+                LessonProgress.objects
+                .filter(user=request.user, lesson_id__in=all_ids, is_completed=True)
+                .values_list('lesson_id', flat=True)
+            )
+        else:
+            done_ids = set()
 
         ctx = {
             'course': course,
@@ -214,6 +417,7 @@ class LessonDetailView(View):
             'sidebar_modules': sidebar_modules,
             'current_module': module,
             'current_lesson': lesson,
+            'completed_lesson_ids': done_ids,
             'lesson_description_html': mark_safe(render_markdown(lesson.description)),
             'note': note,
             'note_rendered': mark_safe(render_markdown(note.content)) if note and note.content else '',
@@ -239,12 +443,25 @@ def mark_lesson_complete(request, course_slug, module_slug, lesson_slug):
     progress.save(update_fields=['is_completed'])
 
     _update_streak(request.user)
+    _maybe_issue_certificate(request.user, lesson.module.course)
 
     return JsonResponse({
         'status': 'ok',
         'is_completed': progress.is_completed,
         'lesson_id': lesson.id,
     })
+
+
+def _maybe_issue_certificate(user, course):
+    total = Lesson.objects.filter(module__course=course).count()
+    if not total:
+        return
+    completed = LessonProgress.objects.filter(
+        user=user, lesson__module__course=course, is_completed=True,
+    ).count()
+    if completed >= total:
+        Certificate.objects.get_or_create(user=user, course=course)
+
 
 def _update_streak(user):
     from users.models import UserProfile
@@ -295,6 +512,65 @@ def save_note(request, course_slug, module_slug, lesson_slug):
 
 
 # ---------------------------------------------------------------------------
+# POST /malaka/<course_slug>/yozilish/
+# ---------------------------------------------------------------------------
+
+@login_required
+def enroll_course(request, course_slug):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    course = get_object_or_404(Course, slug=course_slug)
+    Enrollment.objects.get_or_create(user=request.user, course=course)
+    messages.success(request, "Kursga yozildingiz!")
+    return redirect('learning:course_detail', course_slug=course.slug)
+
+
+# ---------------------------------------------------------------------------
+# POST /malaka/<course_slug>/sharh/
+# ---------------------------------------------------------------------------
+
+@login_required
+def submit_review(request, course_slug):
+    if request.method != 'POST':
+        return redirect('learning:course_detail', course_slug=course_slug)
+    course = get_object_or_404(Course, slug=course_slug)
+    instance = CourseReview.objects.filter(user=request.user, course=course).first()
+    form = CourseReviewForm(request.POST, instance=instance)
+    if form.is_valid():
+        review = form.save(commit=False)
+        review.user = request.user
+        review.course = course
+        review.save()
+        course.update_rating()
+        messages.success(request, "Sharhingiz saqlandi. Rahmat!")
+    else:
+        messages.error(request, "Iltimos baho va sharhni to'g'ri kiriting.")
+    return redirect('learning:course_detail', course_slug=course.slug)
+
+
+# ---------------------------------------------------------------------------
+# GET /malaka/<course_slug>/sertifikat/
+# ---------------------------------------------------------------------------
+
+@login_required
+def certificate_view(request, course_slug):
+    course = get_object_or_404(Course, slug=course_slug)
+    _maybe_issue_certificate(request.user, course)
+    cert = Certificate.objects.filter(user=request.user, course=course).first()
+    if not cert:
+        messages.warning(request, "Sertifikat olish uchun kursni to'liq tugating.")
+        return redirect('learning:course_detail', course_slug=course.slug)
+    full_name = (request.user.first_name + ' ' + request.user.last_name).strip()
+    if not full_name:
+        full_name = request.user.username
+    return render(request, 'learning/certificate.html', {
+        'course': course,
+        'certificate': cert,
+        'full_name': full_name,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Session tracking helpers
 # ---------------------------------------------------------------------------
 
@@ -339,6 +615,7 @@ def _maybe_auto_complete(session, lesson):
         progress.is_completed = True
         progress.save(update_fields=['is_completed'])
         _update_streak(session.user)
+        _maybe_issue_certificate(session.user, lesson.module.course)
         return True
     return False
 
@@ -349,26 +626,20 @@ def _handle_session_event(request, lesson, data):
         VideoSession, id=data.get('session_id'), user=request.user, lesson=lesson
     )
 
-    # Validate event_type
     event_type = data.get('event_type', '')
     if event_type not in VALID_EVENT_TYPES:
         return JsonResponse({'error': 'Invalid event_type'}, status=400)
 
-    # Validate and clamp position
     try:
         position = int(data.get('position_seconds', 0))
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Invalid position_seconds'}, status=400)
     position = _clamp_position(position, lesson)
 
-    # Validate metadata size
     metadata = data.get('metadata') or {}
     if len(json.dumps(metadata)) > MAX_METADATA_SIZE:
-        metadata = {}  # silently drop oversized metadata
+        metadata = {}
 
-    # Rate limiting: only throttle heartbeat events (high-frequency).
-    # State-critical events (play, pause, seek, ended, page_hidden, speed_change)
-    # must always be processed to keep the incremental watch time state machine correct.
     if event_type == 'heartbeat':
         last_event = session.events.order_by('-created_at').first()
         if last_event:
@@ -383,7 +654,6 @@ def _handle_session_event(request, lesson, data):
         metadata=metadata,
     )
 
-    # Incremental watched time update (no full event scan)
     _update_watched_incremental(session, event_type, position)
 
     session.last_position_seconds = position
