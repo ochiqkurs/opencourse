@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}Qidiruv – {{ q }}{% endblock %}
+
+{% block content %}
+<div class="container search-page" style="padding-top:8px">
+  <h1>Qidiruv natijalari</h1>
+  {% if q %}
+    <p class="sr-meta">"<strong>{{ q }}</strong>" so'rovi bo'yicha {{ courses|length|add:lessons|length }} ta natija topildi.</p>
+  {% else %}
+    <p class="sr-meta">Qidiruv satriga so'z yozing.</p>
+  {% endif %}
+
+  <form action="" method="get" style="max-width:560px;margin-bottom:24px">
+    <input type="search" name="q" value="{{ q }}" placeholder="Kurs, dars yoki mavzu izlash..." autofocus>
+  </form>
+
+  {% if courses %}
+    <div class="search-section">
+      <h2>Kurslar</h2>
+      <div class="card-grid">
+        {% for course in courses %}
+          {% include "learning/_course_card.html" %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if lessons %}
+    <div class="search-section">
+      <h2>Darslar</h2>
+      {% for lesson in lessons %}
+        <a class="search-lesson-row" href="{% url 'learning:lesson_detail' lesson.module.course.slug lesson.module.slug lesson.slug %}">
+          <div>
+            <div style="font-weight:600">{{ lesson.title }}</div>
+            <div class="sl-course">{{ lesson.module.course.title }} · {{ lesson.module.title }}</div>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if q and not courses and not lessons %}
+    <div class="empty-state">
+      <div class="es-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </div>
+      <h3>Hech narsa topilmadi</h3>
+      <p>Boshqa so'z bilan qidirib ko'ring yoki barcha kurslarni ko'ring.</p>
+      <a href="{% url 'learning:course_list' %}" class="btn btn-primary">Barcha kurslar</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

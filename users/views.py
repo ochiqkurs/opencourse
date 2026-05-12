@@ -18,9 +18,11 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
-from django.db.models import Sum
-from learning.models import Course, Module, Lesson, LessonProgress, VideoSession
-from learning.forms import CourseForm, ModuleForm, LessonForm
+from learning.models import (
+    Course, Module, Lesson, LessonProgress, LessonView,
+    Enrollment, Certificate, Category,
+)
+from learning.forms import CourseForm, ModuleForm, LessonForm, CategoryForm
 from .forms import UserProfileForm
 from .models import TelegramAuthToken, TelegramProfile
 
@@ -155,28 +157,23 @@ class ProfileView(LoginRequiredMixin, View):
 
     def _base_context(self, request):
         from datetime import timedelta, date
-        from django.db.models.functions import TruncDate
+        from django.db.models import Count
         from users.models import UserProfile
 
         user = request.user
 
-        user_seconds = (
-            VideoSession.objects.filter(user=user)
-            .aggregate(Sum('actual_watched_seconds'))['actual_watched_seconds__sum'] or 0
-        )
+        user_lesson_views = LessonView.objects.filter(user=user).count()
 
-        # Activity graph — oxirgi 365 kun
+        # Activity graph — last 365 days, counting distinct lessons watched per day.
         since = date.today() - timedelta(days=364)
         raw_activity = (
-            VideoSession.objects
-            .filter(user=user, started_at__date__gte=since)
-            .annotate(day=TruncDate('started_at'))
-            .values('day')
-            .annotate(total_seconds=Sum('actual_watched_seconds'))
-            .values('day', 'total_seconds')
+            LessonView.objects
+            .filter(user=user, viewed_on__gte=since)
+            .values('viewed_on')
+            .annotate(lessons=Count('lesson', distinct=True))
         )
         activity_map = {
-            str(row['day']): row['total_seconds'] // 60
+            str(row['viewed_on']): row['lessons']
             for row in raw_activity
         }
 
@@ -243,11 +240,17 @@ class ProfileView(LoginRequiredMixin, View):
 
         in_progress_courses.sort(key=lambda x: x['last_watched_at'], reverse=True)
 
+        certificates = list(
+            Certificate.objects.filter(user=user)
+            .select_related('course')
+            .order_by('-issued_at')
+        )
+
         return {
             'form': UserProfileForm(instance=user),
             'is_admin': user.is_staff or user.is_superuser,
             'user': user,
-            'user_seconds': user_seconds,
+            'user_lesson_views': user_lesson_views,
             'user_completed_lessons': LessonProgress.objects.filter(user=user, is_completed=True).count(),
             'has_usable_password': user.has_usable_password(),
             'password_form': PasswordChangeForm(user) if user.has_usable_password() else SetPasswordForm(user),
@@ -256,6 +259,8 @@ class ProfileView(LoginRequiredMixin, View):
             'current_streak': profile.current_streak,
             'longest_streak': profile.longest_streak,
             'in_progress_courses': in_progress_courses,
+            'certificates': certificates,
+            'enrollment_count': Enrollment.objects.filter(user=user).count(),
         }
 
     def get(self, request):

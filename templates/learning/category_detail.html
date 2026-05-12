@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}{{ category.name }} – Kurslar{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:8px">
+  <nav class="breadcrumb">
+    <a href="{% url 'home' %}">Bosh sahifa</a>
+    <span class="sep">›</span>
+    <a href="{% url 'learning:course_list' %}">Kurslar</a>
+    <span class="sep">›</span>
+    <span>{{ category.name }}</span>
+  </nav>
+
+  <h1>{{ category.name }}</h1>
+  {% if category.description %}
+    <p class="description">{{ category.description }}</p>
+  {% endif %}
+
+  <div class="filter-toolbar">
+    <span class="filter-label">Boshqa kategoriyalar:</span>
+    {% for cat in categories %}
+      <a class="chip {% if cat.slug == category.slug %}active{% endif %}" href="{% url 'learning:category_detail' cat.slug %}">{{ cat.name }}</a>
+    {% endfor %}
+  </div>
+
+  {% if courses %}
+    <div class="card-grid">
+      {% for course in courses %}
+        {% include "learning/_course_card.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>Kurslar topilmadi</h3>
+      <p>Bu kategoriyada hozircha kurslar yo'q. Tez orada qo'shiladi!</p>
+      <a href="{% url 'learning:course_list' %}" class="btn btn-secondary">Barcha kurslar</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

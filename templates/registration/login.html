@@ -1,62 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Kirish – Ochiq kurs{% endblock %}
+{% block title %}Kirish – Ochiq Kurs{% endblock %}
 
 {% block content %}
-<div class="login-box" style="max-width: 400px; margin: 0 auto; text-align: center;">
-  <h1>Telegram orqali kirish</h1>
+<div class="login-box">
+  <div class="login-logo">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12 11 14 15 10"/><circle cx="12" cy="12" r="10"/></svg>
+  </div>
+  <h1>Hisobingizga kiring</h1>
+  <p class="login-sub">Telegram orqali xavfsiz va tez kirish. Parol kerak emas.</p>
 
-  <a href="{{ bot_url }}" id="tg-btn" target="_blank" rel="noopener noreferrer" 
-     style="
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      gap: 10px; 
-      width: 100%; 
-      background-color: #0088cc; 
-      color: white; 
-      padding: 12px 0; 
-      text-decoration: none; 
-      border-radius: 8px; 
-      font-family: sans-serif; 
-      font-weight: 600;
-      box-sizing: border-box;
-     ">
+  <a href="{{ bot_url }}" id="tg-btn" target="_blank" rel="noopener noreferrer" class="tg-btn">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42l10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001l-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15l4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z" fill="white"/>
     </svg>
-    <span>Botga o'tish</span>
+    <span>Telegram bot orqali kirish</span>
   </a>
 
-  <p class="tg-note" style="margin-top: 15px; font-size: 0.9em; color: #666;">
+  <p class="tg-note">
     Telegram hisobingizga kirilmaydi. Faqat shaxsingizni tasdiqlash uchun ishlatiladi.
   </p>
 
-  <div id="tg-status" style="display:none; margin-top: 20px;">
+  <div id="tg-status" style="display:none">
     <div class="tg-spinner"></div>
     <p>Telegram botiga o'ting va <strong>Start</strong> tugmasini bosing…</p>
-    <p id="tg-error" class="form-errors" style="display:none; color: red;"></p>
+    <p id="tg-error" class="form-errors" style="display:none"></p>
   </div>
 </div>
-
-<style>
-  .tg-note {
-    font-size: 0.85em;
-    color: #666;
-    margin-top: 0.75rem;
-  }
-  .tg-spinner {
-    width: 28px;
-    height: 28px;
-    border: 3px solid #ccc;
-    border-top-color: #0088cc;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 1rem auto 0.5rem;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #tg-status { text-align: center; margin-top: 1.5rem; }
-</style>
 
 <script>
   (function () {
@@ -69,7 +39,7 @@
     btn.addEventListener('click', function () {
       statusBox.style.display = 'block';
       btn.style.pointerEvents = 'none';
-      btn.style.opacity = '0.6';
+      btn.style.opacity = '0.7';
       startPolling();
     });
 
@@ -89,13 +59,10 @@
             showError('Havola muddati tugadi. Sahifani yangilang.');
           } else if (data.status === 'rate_limited') {
             clearInterval(pollInterval);
-            showError('Juda ko\'p so\'rov. Biroz kuting.');
+            showError("Juda ko'p so'rov. Biroz kuting.");
           }
-          // 'pending' → keep polling
         })
-        .catch(function () {
-          // network error — keep trying silently
-        });
+        .catch(function () {});
     }
 
     function showError(msg) {

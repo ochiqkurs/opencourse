@@ -9,10 +9,36 @@ urlpatterns = [
         views.CourseListView.as_view(),
         name='course_list',
     ),
+    # NOTE: explicit prefixed paths must come BEFORE the <course_slug> catch-all.
+    path(
+        'qidiruv/',
+        views.SearchView.as_view(),
+        name='search',
+    ),
+    path(
+        'kategoriya/<slug:slug>/',
+        views.CategoryDetailView.as_view(),
+        name='category_detail',
+    ),
     path(
         '<slug:course_slug>/',
         views.CourseDetailView.as_view(),
         name='course_detail',
+    ),
+    path(
+        '<slug:course_slug>/yozilish/',
+        views.enroll_course,
+        name='enroll',
+    ),
+    path(
+        '<slug:course_slug>/sharh/',
+        views.submit_review,
+        name='submit_review',
+    ),
+    path(
+        '<slug:course_slug>/sertifikat/',
+        views.certificate_view,
+        name='certificate',
     ),
     path(
         '<slug:course_slug>/<slug:module_slug>/',
@@ -35,18 +61,8 @@ urlpatterns = [
         name='save_note',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/boshlash/',
-        views.session_start,
-        name='session_start',
-    ),
-    path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/holat/',
-        views.session_event,
-        name='session_event',
-    ),
-    path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/xabar/',
-        views.session_beacon,
-        name='session_beacon',
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/korildi/',
+        views.record_view,
+        name='record_view',
     ),
 ]

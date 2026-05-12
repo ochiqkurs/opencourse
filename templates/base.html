@@ -1,42 +1,149 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10B981">
   <link rel="icon" href="{% static 'images/favicon.png' %}" type="image/png">
-  <title>{% block title %}Ochiq kurs{% endblock %}</title>
+  <title>{% block title %}Ochiq Kurs — O'zbekcha onlayn ta'lim platformasi{% endblock %}</title>
+  <meta name="description" content="O'zbek tilidagi premium onlayn kurslar. Dasturlash, dizayn, ish hayoti va boshqa ko'plab yo'nalishlar bo'yicha video darslar.">
+
+  <!-- Theme bootstrap (prevents flash) -->
+  <script>
+    (function(){
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        } else if (t === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
 
-  <!-- Top navbar -->
   <header class="navbar">
-    <a href="{% url 'home' %}" class="navbar-logo">Ochiq kurs</a>
-    <nav class="navbar-links">
-      <a href="{% url 'learning:course_list' %}" class="navbar-link">Malaka</a>
-      {% if user.is_authenticated %}
-        <a href="{% url 'users:profile' %}" class="navbar-link">Profile</a>
-        <span class="navbar-user">{{ user.username }}</span>
-        <form method="post" action="{% url 'users:logout' %}" class="navbar-logout-form">
-          {% csrf_token %}
-          <button type="submit" class="navbar-btn navbar-btn-outline">Logout</button>
-          <!-- <button type="submit" class="navbar-btn navbar-btn-primary">Logout</button> -->
-        </form>
-      {% else %}
-        <a href="{% url 'users:signup' %}" class="navbar-btn navbar-btn-outline">Signup</a>
-        <a href="{% url 'users:login' %}" class="navbar-btn navbar-btn-outline">Login</a>
-      {% endif %}
-    </nav>
+    <div class="navbar-inner">
+      <a href="{% url 'home' %}" class="navbar-logo">
+        <span class="logo-mark">O</span>
+        <span class="logo-text">Ochiq Kurs</span>
+      </a>
+
+      <nav class="navbar-nav">
+        <a href="{% url 'learning:course_list' %}" class="navbar-link nav-only-desktop">Kurslar</a>
+        <a href="{% url 'learning:course_list' %}?saralash=new" class="navbar-link nav-only-desktop">Yangi</a>
+        {% if user.is_authenticated %}
+          <a href="{% url 'users:profile' %}" class="navbar-link nav-only-desktop">Boshqaruv</a>
+        {% endif %}
+      </nav>
+
+      <form class="navbar-search" action="{% url 'learning:search' %}" method="get" role="search" autocomplete="off">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="search" name="q" id="nav-search-input" placeholder="Kurslar, darslar bo'yicha qidirish..." aria-label="Search" data-suggest-url="{% url 'learning:search' %}">
+        <div class="search-suggest" id="nav-search-suggest" aria-live="polite"></div>
+      </form>
+
+      <div class="navbar-right">
+        <button class="navbar-icon-btn" id="theme-toggle" aria-label="Mavzuni o'zgartirish" title="Mavzuni o'zgartirish">
+          <svg class="theme-icon-light" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="theme-icon-dark hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+
+        {% if user.is_authenticated %}
+          <div class="nav-user" id="nav-user">
+            <button class="nav-user-trigger" id="nav-user-trigger" aria-haspopup="menu" aria-expanded="false">
+              <span class="avatar">
+                {% with tp=user.telegram_profile %}
+                  {% if tp.photo_url %}
+                    <img src="{{ tp.photo_url }}" alt="{{ user.username }}">
+                  {% else %}
+                    {{ user.first_name|default:user.username|slice:":1"|upper }}
+                  {% endif %}
+                {% endwith %}
+              </span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="nav-user-menu" role="menu">
+              <div class="uname">{{ user.first_name|default:user.username }}</div>
+              <div class="umail">@{{ user.username }}</div>
+              <div class="divider"></div>
+              <a href="{% url 'users:profile' %}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                Boshqaruv paneli
+              </a>
+              <a href="{% url 'learning:course_list' %}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                Mening kurslarim
+              </a>
+              {% if user.is_staff or user.is_superuser %}
+                <div class="divider"></div>
+                <a href="{% url 'users:admin_panel' %}">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  Admin panel
+                </a>
+              {% endif %}
+              <div class="divider"></div>
+              <form method="post" action="{% url 'users:logout' %}" style="margin:0">
+                {% csrf_token %}
+                <button type="submit">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                  Chiqish
+                </button>
+              </form>
+            </div>
+          </div>
+        {% else %}
+          <a href="{% url 'users:login' %}" class="navbar-btn navbar-btn-outline nav-only-desktop">Kirish</a>
+          <a href="{% url 'users:signup' %}" class="navbar-btn navbar-btn-primary">Boshlash</a>
+        {% endif %}
+
+        <button class="navbar-icon-btn nav-mobile-toggle" id="mobile-toggle" aria-label="Menyu">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
   </header>
+
+  <div class="mobile-drawer" id="mobile-drawer">
+    <div class="mobile-search">
+      <form action="{% url 'learning:search' %}" method="get">
+        <input type="search" name="q" placeholder="Qidiruv...">
+      </form>
+    </div>
+    <a href="{% url 'learning:course_list' %}">Barcha kurslar</a>
+    <a href="{% url 'learning:course_list' %}?saralash=new">Yangi kurslar</a>
+    {% if user.is_authenticated %}
+      <a href="{% url 'users:profile' %}">Boshqaruv paneli</a>
+      {% if user.is_staff or user.is_superuser %}
+        <a href="{% url 'users:admin_panel' %}">Admin panel</a>
+      {% endif %}
+      <form method="post" action="{% url 'users:logout' %}" style="margin-top:16px">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary btn-block">Chiqish</button>
+      </form>
+    {% else %}
+      <a href="{% url 'users:login' %}">Kirish</a>
+      <a href="{% url 'users:signup' %}">Ro'yxatdan o'tish</a>
+    {% endif %}
+  </div>
 
   <div class="layout{% if show_sidebar %} layout-with-sidebar{% endif %}">
 
     {% if show_sidebar %}
-    <!-- Sidebar -->
     <nav class="sidebar">
       <div class="sidebar-header">
-        <a href="{% url 'learning:course_list' %}" class="sidebar-back">← Malakalar</a>
+        <a href="{% url 'learning:course_detail' sidebar_course.slug %}" class="sidebar-back">← Kursga qaytish</a>
         <strong class="sidebar-skill-title">{{ sidebar_course.title }}</strong>
       </div>
       <ul class="subskill-accordion">
@@ -50,23 +157,27 @@
               {% for lesson in sub.lessons.all %}
               <li class="sidebar-lesson-item {% if lesson == current_lesson %}active{% endif %}">
                 <a href="{% url 'learning:lesson_detail' sidebar_course.slug sub.slug lesson.slug %}">
-                  {{ lesson.title }}
+                  {% if completed_lesson_ids and lesson.id in completed_lesson_ids %}
+                    <svg class="ll-check" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {% else %}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  {% endif %}
+                  <span>{{ lesson.title }}</span>
                 </a>
               </li>
               {% empty %}
-              <li class="sidebar-lesson-item empty">No lessons yet</li>
+              <li class="sidebar-lesson-item empty">Hozircha darslar yo'q</li>
               {% endfor %}
             </ul>
           </details>
         </li>
         {% empty %}
-        <li class="sidebar-empty">No modules yet.</li>
+        <li class="sidebar-empty">Hozircha modullar yo'q.</li>
         {% endfor %}
       </ul>
     </nav>
     {% endif %}
 
-    <!-- Main content -->
     <main class="content{% if not show_sidebar %} content-full{% endif %}">
       {% if messages %}
         <div class="messages">
@@ -79,15 +190,55 @@
     </main>
 
   </div>
+
   <footer class="site-footer">
     <div class="site-footer-inner">
-      <p class="footer-copy">{{ now|date:"Y" }} Ochiq kurs</p>
-      <!-- <nav class="footer-links">
-        <a href="{% url 'home' %}">Home</a>
-        <a href="{% url 'learning:course_list' %}">Malaka</a>
-        <a href="{% url 'users:login' %}">Login</a>
-      </nav> -->
+      <div class="footer-cols">
+        <div class="footer-brand">
+          <div class="brand-line">
+            <span class="logo-mark" style="width:30px;height:30px;display:inline-grid;place-items:center;background:linear-gradient(135deg,var(--brand-500),var(--brand-700));color:#fff;border-radius:8px;font-weight:900">O</span>
+            Ochiq Kurs
+          </div>
+          <p>O'zbek tilidagi onlayn ta'lim platformasi. Yangi malakalarni o'rganing, sertifikat oling va o'sib boring.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Platforma</h4>
+          <a href="{% url 'learning:course_list' %}">Barcha kurslar</a>
+          <a href="{% url 'learning:course_list' %}?saralash=new">Yangi qo'shilgan</a>
+          <a href="{% url 'learning:course_list' %}?saralash=rating">Eng yaxshi baholangan</a>
+          <a href="{% url 'learning:search' %}">Qidiruv</a>
+        </div>
+        <div class="footer-col">
+          <h4>Hisob</h4>
+          {% if user.is_authenticated %}
+            <a href="{% url 'users:profile' %}">Mening boshqaruv panelim</a>
+            <a href="{% url 'users:logout' %}">Chiqish</a>
+          {% else %}
+            <a href="{% url 'users:signup' %}">Ro'yxatdan o'tish</a>
+            <a href="{% url 'users:login' %}">Kirish</a>
+          {% endif %}
+        </div>
+        <div class="footer-col">
+          <h4>Qo'llab-quvvatlash</h4>
+          <a href="#">Yordam markazi</a>
+          <a href="#">Aloqa</a>
+          <a href="#">Maxfiylik siyosati</a>
+          <a href="#">Foydalanish shartlari</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p class="footer-copy">© {% now "Y" %} Ochiq Kurs. Barcha huquqlar himoyalangan.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Telegram"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42l10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001l-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15l4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"/></svg></a>
+          <a href="#" aria-label="YouTube"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg></a>
+          <a href="#" aria-label="GitHub"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg></a>
+        </div>
+      </div>
     </div>
   </footer>
+
+  <script src="{% static 'js/ui.js' %}" defer></script>
+  <script src="{% static 'js/search.js' %}" defer></script>
+  {% block extra_body %}{% endblock %}
 </body>
 </html>
