@@ -15,8 +15,9 @@ from django.views import View
 from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
+    Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
 )
-from .forms import CourseReviewForm
+from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
 from .utils import render_markdown
 
 User = get_user_model()
@@ -35,6 +36,12 @@ def _course_card_annotations(qs):
     )
 
 
+def _user_wishlist_ids(user):
+    if not user.is_authenticated:
+        return set()
+    return set(Wishlist.objects.filter(user=user).values_list('course_id', flat=True))
+
+
 # ---------------------------------------------------------------------------
 # / (home page — public)
 # ---------------------------------------------------------------------------
@@ -43,16 +50,29 @@ class HomeView(View):
     template_name = 'home.html'
 
     def get(self, request):
-        courses = _course_card_annotations(
-            Course.objects.select_related('category')
-        ).order_by('-is_featured', 'order')
+        all_courses = list(
+            _course_card_annotations(
+                Course.objects.select_related('category')
+            ).order_by('-is_featured', 'order')
+        )
 
-        featured = [c for c in courses if c.is_featured][:6]
+        featured = [c for c in all_courses if c.is_featured][:8]
         if not featured:
-            featured = list(courses[:6])
+            featured = all_courses[:8]
 
-        # Estimated hours of learning = sum of lesson durations across all views.
-        # Each view counts as one full lesson watch (good-enough proxy).
+        trending = sorted(all_courses, key=lambda c: (c.student_count or 0), reverse=True)[:8]
+        newest = list(
+            _course_card_annotations(
+                Course.objects.select_related('category')
+            ).order_by('-id')[:8]
+        )
+        top_rated = list(
+            _course_card_annotations(
+                Course.objects.filter(rating_count__gt=0)
+                .select_related('category')
+            ).order_by('-avg_rating', '-rating_count')[:8]
+        )
+
         total_seconds = (
             LessonView.objects
             .aggregate(s=Sum('lesson__duration_seconds'))['s'] or 0
@@ -73,15 +93,31 @@ class HomeView(View):
             .order_by('-created_at')[:6]
         )
 
+        global_announcements = list(
+            Announcement.objects.filter(course__isnull=True).order_by('-is_pinned', '-created_at')[:2]
+        )
+
+        # category strips: one row per category (top 8 by enrollments)
+        category_strips = []
+        for cat in categories[:6]:
+            cat_courses = [c for c in all_courses if c.category_id == cat.id][:6]
+            if cat_courses:
+                category_strips.append({'category': cat, 'courses': cat_courses})
+
         return render(request, self.template_name, {
-            'courses': list(courses),
             'featured': featured,
+            'trending': trending,
+            'newest': newest,
+            'top_rated': top_rated,
             'categories': categories,
             'total_hours': total_hours,
             'total_users': total_users,
             'total_lessons': total_lessons,
             'total_courses': total_courses,
             'latest_reviews': latest_reviews,
+            'global_announcements': global_announcements,
+            'category_strips': category_strips,
+            'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
 
@@ -129,6 +165,7 @@ class CourseListView(View):
             'active_sort': sort,
             'q': q,
             'level_choices': Course.LEVEL_CHOICES,
+            'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
 
@@ -149,6 +186,7 @@ class CategoryDetailView(View):
             'category': category,
             'courses': list(courses),
             'categories': categories,
+            'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
 
@@ -199,6 +237,7 @@ class SearchView(View):
             'q': q,
             'courses': courses,
             'lessons': lessons,
+            'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
 
@@ -239,11 +278,13 @@ class CourseDetailView(View):
             is_enrolled = Enrollment.objects.filter(user=request.user, course=course).exists()
             user_review = CourseReview.objects.filter(user=request.user, course=course).first()
             has_certificate = Certificate.objects.filter(user=request.user, course=course).exists()
+            is_wishlisted = Wishlist.objects.filter(user=request.user, course=course).exists()
         else:
             progress_map = {}
             is_enrolled = False
             user_review = None
             has_certificate = False
+            is_wishlisted = False
 
         for module in modules:
             lessons = list(module.lessons.order_by('order'))
@@ -293,6 +334,20 @@ class CourseDetailView(View):
                 pct = int((c / course.rating_count) * 100) if course.rating_count else 0
                 rating_breakdown.append({'star': star, 'count': c, 'percent': pct})
 
+        announcements = list(
+            Announcement.objects.filter(
+                Q(course=course) | Q(course__isnull=True)
+            ).order_by('-is_pinned', '-created_at')[:3]
+        )
+
+        # preview lesson: first lesson marked is_preview OR very first lesson
+        preview_lesson = (
+            Lesson.objects.filter(module__course=course, is_preview=True)
+            .order_by('module__order', 'order').first()
+            or Lesson.objects.filter(module__course=course)
+            .order_by('module__order', 'order').first()
+        )
+
         ctx = {
             'course': course,
             'modules_data': modules_data,
@@ -303,12 +358,15 @@ class CourseDetailView(View):
             'is_complete': is_complete,
             'is_enrolled': is_enrolled,
             'has_certificate': has_certificate,
+            'is_wishlisted': is_wishlisted,
             'reviews': reviews,
             'review_form': CourseReviewForm(instance=user_review),
             'user_review': user_review,
             'student_count': student_count,
             'rating_breakdown': rating_breakdown,
             'description_html': mark_safe(render_markdown(course.description)) if course.description else '',
+            'announcements': announcements,
+            'preview_lesson': preview_lesson,
         }
         return render(request, self.template_name, ctx)
 
@@ -368,9 +426,20 @@ class LessonDetailView(View):
             ).first()
             note = Note.objects.filter(user=request.user, lesson=lesson).first()
             Enrollment.objects.get_or_create(user=request.user, course=course)
+            is_wishlisted = Wishlist.objects.filter(user=request.user, course=course).exists()
         else:
             progress = None
             note = None
+            is_wishlisted = False
+
+        resources = list(lesson.resources.all())
+        questions = list(
+            LessonQuestion.objects
+            .filter(lesson=lesson)
+            .select_related('user', 'user__telegram_profile')
+            .prefetch_related('answers__user')
+            .order_by('-created_at')[:30]
+        )
 
         sibling_lessons = list(module.lessons.order_by('order'))
         current_index = next(
@@ -404,6 +473,16 @@ class LessonDetailView(View):
         else:
             done_ids = set()
 
+        total_in_course = Lesson.objects.filter(module__course=course).count()
+        completed_in_course = len(done_ids)
+        course_percent = int(completed_in_course / total_in_course * 100) if total_in_course else 0
+
+        announcements = list(
+            Announcement.objects.filter(
+                Q(course=course) | Q(course__isnull=True)
+            ).order_by('-is_pinned', '-created_at')[:3]
+        )
+
         ctx = {
             'course': course,
             'module': module,
@@ -420,6 +499,15 @@ class LessonDetailView(View):
             'lesson_description_html': mark_safe(render_markdown(lesson.description)),
             'note': note,
             'note_rendered': mark_safe(render_markdown(note.content)) if note and note.content else '',
+            'resources': resources,
+            'questions': questions,
+            'question_form': LessonQuestionForm(),
+            'answer_form': LessonAnswerForm(),
+            'is_wishlisted': is_wishlisted,
+            'course_percent': course_percent,
+            'course_completed': completed_in_course,
+            'course_total': total_in_course,
+            'announcements': announcements,
         }
         return render(request, self.template_name, ctx)
 
@@ -616,3 +704,199 @@ def _get_lesson(course_slug, module_slug, lesson_slug):
     course = get_object_or_404(Course, slug=course_slug)
     module = get_object_or_404(Module, slug=module_slug, course=course)
     return get_object_or_404(Lesson, slug=lesson_slug, module=module)
+
+
+# ---------------------------------------------------------------------------
+# Wishlist
+# ---------------------------------------------------------------------------
+
+@login_required
+def toggle_wishlist(request, course_slug):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    course = get_object_or_404(Course, slug=course_slug)
+    qs = Wishlist.objects.filter(user=request.user, course=course)
+    if qs.exists():
+        qs.delete()
+        return JsonResponse({'status': 'ok', 'wishlisted': False})
+    Wishlist.objects.create(user=request.user, course=course)
+    return JsonResponse({'status': 'ok', 'wishlisted': True})
+
+
+@login_required
+def wishlist_view(request):
+    items = (
+        Wishlist.objects
+        .filter(user=request.user)
+        .select_related('course', 'course__category')
+        .order_by('-created_at')
+    )
+    course_ids = [w.course_id for w in items]
+    courses = list(
+        _course_card_annotations(
+            Course.objects.filter(id__in=course_ids).select_related('category')
+        )
+    )
+    course_by_id = {c.id: c for c in courses}
+    ordered_courses = [course_by_id[w.course_id] for w in items if w.course_id in course_by_id]
+    return render(request, 'learning/wishlist.html', {
+        'courses': ordered_courses,
+        'wishlist_ids': set(course_ids),
+    })
+
+
+# ---------------------------------------------------------------------------
+# My Learning (enrolled courses + progress)
+# ---------------------------------------------------------------------------
+
+@login_required
+def my_learning(request):
+    enrollments = (
+        Enrollment.objects.filter(user=request.user)
+        .select_related('course', 'course__category')
+        .order_by('-enrolled_at')
+    )
+
+    course_ids = [e.course_id for e in enrollments]
+    courses = list(
+        _course_card_annotations(
+            Course.objects.filter(id__in=course_ids).select_related('category')
+        )
+    )
+    course_by_id = {c.id: c for c in courses}
+
+    progress_qs = LessonProgress.objects.filter(
+        user=request.user, lesson__module__course_id__in=course_ids,
+    ).values('lesson__module__course_id', 'is_completed').annotate(c=Count('id'))
+
+    # per-course completed lesson counts
+    completed_map = {}
+    for row in progress_qs:
+        cid = row['lesson__module__course_id']
+        if row['is_completed']:
+            completed_map[cid] = completed_map.get(cid, 0) + row['c']
+
+    cards = []
+    for e in enrollments:
+        c = course_by_id.get(e.course_id)
+        if not c:
+            continue
+        total = c.lesson_count or 0
+        done = completed_map.get(c.id, 0)
+        percent = int(done / total * 100) if total else 0
+        cards.append({
+            'course': c,
+            'percent': percent,
+            'done': done,
+            'total': total,
+            'enrolled_at': e.enrolled_at,
+        })
+
+    filter_tab = request.GET.get('holat', 'all')
+    if filter_tab == 'in_progress':
+        cards = [x for x in cards if 0 < x['percent'] < 100]
+    elif filter_tab == 'completed':
+        cards = [x for x in cards if x['percent'] >= 100]
+    elif filter_tab == 'not_started':
+        cards = [x for x in cards if x['percent'] == 0]
+
+    return render(request, 'learning/my_learning.html', {
+        'cards': cards,
+        'filter_tab': filter_tab,
+        'total_enrollments': enrollments.count(),
+        'wishlist_ids': _user_wishlist_ids(request.user),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard
+# ---------------------------------------------------------------------------
+
+def leaderboard_view(request):
+    from users.models import UserProfile
+    from datetime import timedelta
+
+    period = request.GET.get('davr', 'all')
+    today = _today_uzt()
+
+    base = LessonView.objects.all()
+    if period == 'week':
+        since = today - timedelta(days=7)
+        base = base.filter(viewed_on__gte=since)
+    elif period == 'month':
+        since = today - timedelta(days=30)
+        base = base.filter(viewed_on__gte=since)
+
+    rows = (
+        base.values('user_id')
+        .annotate(views=Count('id'))
+        .order_by('-views')[:50]
+    )
+    user_ids = [r['user_id'] for r in rows]
+    users = {u.id: u for u in User.objects.filter(id__in=user_ids).select_related('telegram_profile')}
+    profiles = {p.user_id: p for p in UserProfile.objects.filter(user_id__in=user_ids)}
+    completed_counts = dict(
+        LessonProgress.objects.filter(user_id__in=user_ids, is_completed=True)
+        .values_list('user_id').annotate(c=Count('id'))
+    )
+
+    leaders = []
+    for i, r in enumerate(rows, start=1):
+        u = users.get(r['user_id'])
+        if not u:
+            continue
+        prof = profiles.get(u.id)
+        leaders.append({
+            'rank': i,
+            'user': u,
+            'views': r['views'],
+            'completed': completed_counts.get(u.id, 0),
+            'streak': prof.current_streak if prof else 0,
+            'longest_streak': prof.longest_streak if prof else 0,
+        })
+
+    return render(request, 'learning/leaderboard.html', {
+        'leaders': leaders,
+        'period': period,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Q&A on lessons
+# ---------------------------------------------------------------------------
+
+@login_required
+def ask_question(request, course_slug, module_slug, lesson_slug):
+    if request.method != 'POST':
+        return redirect('learning:lesson_detail', course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    form = LessonQuestionForm(request.POST)
+    if form.is_valid():
+        q = form.save(commit=False)
+        q.user = request.user
+        q.lesson = lesson
+        q.save()
+        messages.success(request, "Savolingiz yuborildi.")
+    else:
+        messages.error(request, "Savol matni bo'sh bo'lmasligi kerak.")
+    return redirect(
+        reverse('learning:lesson_detail', args=[course_slug, module_slug, lesson_slug]) + '#qa'
+    )
+
+
+@login_required
+def post_answer(request, course_slug, module_slug, lesson_slug, question_id):
+    if request.method != 'POST':
+        return redirect('learning:lesson_detail', course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    question = get_object_or_404(LessonQuestion, id=question_id, lesson=lesson)
+    form = LessonAnswerForm(request.POST)
+    if form.is_valid():
+        a = form.save(commit=False)
+        a.user = request.user
+        a.question = question
+        a.is_instructor = (request.user.is_staff or request.user.is_superuser)
+        a.save()
+    return redirect(
+        reverse('learning:lesson_detail', args=[course_slug, module_slug, lesson_slug]) + f'#q{question.id}'
+    )

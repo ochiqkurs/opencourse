@@ -16,6 +16,21 @@ urlpatterns = [
         name='search',
     ),
     path(
+        'sevimlilar/',
+        views.wishlist_view,
+        name='wishlist',
+    ),
+    path(
+        'mening-kurslarim/',
+        views.my_learning,
+        name='my_learning',
+    ),
+    path(
+        'reyting/',
+        views.leaderboard_view,
+        name='leaderboard',
+    ),
+    path(
         'kategoriya/<slug:slug>/',
         views.CategoryDetailView.as_view(),
         name='category_detail',
@@ -64,5 +79,20 @@ urlpatterns = [
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/korildi/',
         views.record_view,
         name='record_view',
+    ),
+    path(
+        '<slug:course_slug>/sevimli/',
+        views.toggle_wishlist,
+        name='toggle_wishlist',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/',
+        views.ask_question,
+        name='ask_question',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/<int:question_id>/javob/',
+        views.post_answer,
+        name='post_answer',
     ),
 ]

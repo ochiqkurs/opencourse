@@ -1,6 +1,9 @@
 from django import forms
 from django.utils.text import slugify
-from .models import Course, Module, Lesson, CourseReview, Category
+from .models import (
+    Course, Module, Lesson, CourseReview, Category,
+    LessonQuestion, LessonAnswer,
+)
 
 
 class CourseForm(forms.ModelForm):
@@ -82,6 +85,25 @@ class CategoryForm(forms.ModelForm):
         if not cleaned_data.get('slug') and cleaned_data.get('name'):
             cleaned_data['slug'] = slugify(cleaned_data['name'])
         return cleaned_data
+
+
+class LessonQuestionForm(forms.ModelForm):
+    class Meta:
+        model = LessonQuestion
+        fields = ['title', 'body']
+        widgets = {
+            'title': forms.TextInput(attrs={'placeholder': "Savolingiz nima haqida?", 'maxlength': 200}),
+            'body': forms.Textarea(attrs={'rows': 3, 'placeholder': "Batafsil tushuntiring (ixtiyoriy)..."}),
+        }
+
+
+class LessonAnswerForm(forms.ModelForm):
+    class Meta:
+        model = LessonAnswer
+        fields = ['body']
+        widgets = {
+            'body': forms.Textarea(attrs={'rows': 3, 'placeholder': "Javobingizni yozing..."}),
+        }
 
 
 class CourseReviewForm(forms.ModelForm):

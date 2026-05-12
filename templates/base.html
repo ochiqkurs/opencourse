@@ -42,9 +42,9 @@
 
       <nav class="navbar-nav">
         <a href="{% url 'learning:course_list' %}" class="navbar-link nav-only-desktop">Kurslar</a>
-        <a href="{% url 'learning:course_list' %}?saralash=new" class="navbar-link nav-only-desktop">Yangi</a>
+        <a href="{% url 'learning:leaderboard' %}" class="navbar-link nav-only-desktop">Reyting</a>
         {% if user.is_authenticated %}
-          <a href="{% url 'users:profile' %}" class="navbar-link nav-only-desktop">Boshqaruv</a>
+          <a href="{% url 'learning:my_learning' %}" class="navbar-link nav-only-desktop">Mening kurslarim</a>
         {% endif %}
       </nav>
 
@@ -61,6 +61,9 @@
         </button>
 
         {% if user.is_authenticated %}
+          <a class="navbar-icon-btn nav-only-desktop" href="{% url 'learning:wishlist' %}" aria-label="Sevimlilar" title="Sevimli kurslar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </a>
           <div class="nav-user" id="nav-user">
             <button class="nav-user-trigger" id="nav-user-trigger" aria-haspopup="menu" aria-expanded="false">
               <span class="avatar">
@@ -82,9 +85,17 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
                 Boshqaruv paneli
               </a>
-              <a href="{% url 'learning:course_list' %}">
+              <a href="{% url 'learning:my_learning' %}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                 Mening kurslarim
+              </a>
+              <a href="{% url 'learning:wishlist' %}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                Sevimli kurslar
+              </a>
+              <a href="{% url 'learning:leaderboard' %}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                Reyting
               </a>
               {% if user.is_staff or user.is_superuser %}
                 <div class="divider"></div>
@@ -122,8 +133,10 @@
       </form>
     </div>
     <a href="{% url 'learning:course_list' %}">Barcha kurslar</a>
-    <a href="{% url 'learning:course_list' %}?saralash=new">Yangi kurslar</a>
+    <a href="{% url 'learning:leaderboard' %}">Reyting</a>
     {% if user.is_authenticated %}
+      <a href="{% url 'learning:my_learning' %}">Mening kurslarim</a>
+      <a href="{% url 'learning:wishlist' %}">Sevimlilar</a>
       <a href="{% url 'users:profile' %}">Boshqaruv paneli</a>
       {% if user.is_staff or user.is_superuser %}
         <a href="{% url 'users:admin_panel' %}">Admin panel</a>
@@ -239,6 +252,36 @@
 
   <script src="{% static 'js/ui.js' %}" defer></script>
   <script src="{% static 'js/search.js' %}" defer></script>
+  {% if user.is_authenticated %}
+  <script>
+  (function(){
+    function getCookie(name){
+      var v = '; ' + document.cookie;
+      var parts = v.split('; ' + name + '=');
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    }
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-toggle-wishlist]');
+      if (!btn) return;
+      e.preventDefault();
+      var url = btn.dataset.url;
+      btn.disabled = true;
+      fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+      }).then(function(r){ return r.json(); }).then(function(j){
+        var on = !!j.wishlisted;
+        btn.classList.toggle('active', on);
+        btn.classList.toggle('is-on', on);
+        var label = btn.querySelector('.ec-wishlist-label');
+        if (label) label.textContent = on ? "Sevimlilardan" : "Sevimlilarga qo'shish";
+      }).catch(function(){}).finally(function(){ btn.disabled = false; });
+    });
+  })();
+  </script>
+  {% endif %}
   {% block extra_body %}{% endblock %}
 </body>
 </html>

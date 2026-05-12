@@ -1,42 +1,58 @@
 {% load learning_extras %}
-<a class="course-card" href="{% url 'learning:course_detail' course.slug %}">
-  <div class="course-card-thumb">
-    {% with thumb_url=course.get_thumbnail_url %}
-      {% if thumb_url %}
-        <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
-      {% else %}
-        <div class="course-card-thumb-placeholder">
-          <span>{{ course.title|truncatechars:1 }}</span>
-        </div>
-      {% endif %}
-    {% endwith %}
-    <div class="play-icon" aria-hidden="true">
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    </div>
-    {% if course.is_featured %}
-      <span class="course-card-badge featured">★ Tavsiya</span>
-    {% endif %}
-  </div>
-  <div class="course-card-body">
-    {% if course.category %}
-      <div class="course-card-cat">{{ course.category.name }}</div>
-    {% endif %}
-    <h3 class="course-card-title">{{ course.title }}</h3>
-    <div class="course-card-instructor">{{ course.instructor_display }}</div>
-    {% if course.rating_count %}
-      <div class="course-card-rating">
-        <span class="num">{{ course.avg_rating|floatformat:1 }}</span>
-        {{ course.avg_rating|stars }}
-        <span class="rcount">({{ course.rating_count }})</span>
+<article class="course-card">
+  <a class="course-card-link" href="{% url 'learning:course_detail' course.slug %}">
+    <div class="course-card-thumb">
+      {% with thumb_url=course.get_thumbnail_url %}
+        {% if thumb_url %}
+          <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
+        {% else %}
+          <div class="course-card-thumb-placeholder">
+            <span>{{ course.title|truncatechars:1 }}</span>
+          </div>
+        {% endif %}
+      {% endwith %}
+      <div class="play-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </div>
-    {% endif %}
-    <div class="course-card-meta">
-      {% if course.lesson_count %}<span>{{ course.lesson_count }} dars</span>{% endif %}
-      {% if course.total_duration %}<span class="dot"></span><span>{{ course.total_duration|duration_short }}</span>{% endif %}
-      {% if course.student_count %}<span class="dot"></span><span>{{ course.student_count }} o'quvchi</span>{% endif %}
+      {% if course.is_featured %}
+        <span class="course-card-badge featured">★ Tavsiya</span>
+      {% endif %}
     </div>
-    <div class="course-card-bottom">
-      <span class="course-card-level">{{ course.get_level_display }}</span>
+    <div class="course-card-body">
+      {% if course.category %}
+        <div class="course-card-cat">{{ course.category.name }}</div>
+      {% endif %}
+      <h3 class="course-card-title">{{ course.title }}</h3>
+      <div class="course-card-instructor">{{ course.instructor_display }}</div>
+      <div class="course-card-rating">
+        {% if course.rating_count %}
+          <span class="num">{{ course.avg_rating|floatformat:1 }}</span>
+          {{ course.avg_rating|stars }}
+          <span class="rcount">({{ course.rating_count }})</span>
+        {% else %}
+          <span class="rcount">Yangi</span>
+        {% endif %}
+      </div>
+      <div class="course-card-meta">
+        {% if course.lesson_count %}<span>{{ course.lesson_count }} dars</span>{% endif %}
+        {% if course.total_duration %}<span class="dot"></span><span>{{ course.total_duration|duration_short }}</span>{% endif %}
+        {% if course.student_count %}<span class="dot"></span><span>{{ course.student_count }} o'quvchi</span>{% endif %}
+      </div>
+      <div class="course-card-bottom">
+        <span class="course-card-level">{{ course.get_level_display }}</span>
+        <span class="course-card-price">Bepul</span>
+      </div>
     </div>
-  </div>
-</a>
+  </a>
+  {% if user.is_authenticated %}
+    <button
+      type="button"
+      class="course-card-heart{% if course.id in wishlist_ids %} active{% endif %}"
+      data-toggle-wishlist
+      data-url="{% url 'learning:toggle_wishlist' course.slug %}"
+      aria-label="Sevimlilarga qo'shish"
+      title="Sevimlilarga qo'shish">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    </button>
+  {% endif %}
+</article>

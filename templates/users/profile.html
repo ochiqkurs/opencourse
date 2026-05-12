@@ -22,18 +22,22 @@
       <p class="welcome-sub">Bilim olishni davom ettiraylik. {% if current_streak %}{{ current_streak }} kunlik streakingiz davom etmoqda.{% else %}Bugun yangi kunni boshlang.{% endif %}</p>
     </div>
     <div class="dh-stats">
+      <a class="dh-stat" href="{% url 'learning:my_learning' %}" style="text-decoration:none;color:inherit">
+        <div class="num">{{ enrollment_count }}</div>
+        <div class="lab">Mening kurslarim</div>
+      </a>
       <div class="dh-stat">
         <div class="num">🔥 {{ current_streak }}</div>
         <div class="lab">Kunlik streak</div>
       </div>
       <div class="dh-stat">
         <div class="num">{{ user_completed_lessons }}</div>
-        <div class="lab">Tugatilgan</div>
+        <div class="lab">Tugatilgan dars</div>
       </div>
-      <div class="dh-stat">
-        <div class="num">{{ enrollment_count }}</div>
-        <div class="lab">Kurslar</div>
-      </div>
+      <a class="dh-stat" href="{% url 'learning:leaderboard' %}" style="text-decoration:none;color:inherit">
+        <div class="num">🏆</div>
+        <div class="lab">Reyting</div>
+      </a>
     </div>
   </div>
 

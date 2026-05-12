@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Reyting — Ochiq Kurs{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:8px">
+  <div class="page-head">
+    <div>
+      <h1>O'quvchilar reytingi</h1>
+      <p class="text-muted">Eng faol o'quvchilar — ko'rilgan darslar va streak bo'yicha.</p>
+    </div>
+  </div>
+
+  <div class="learn-tabs">
+    <a class="{% if period == 'all' %}active{% endif %}" href="?davr=all">Hammasi</a>
+    <a class="{% if period == 'month' %}active{% endif %}" href="?davr=month">Oy</a>
+    <a class="{% if period == 'week' %}active{% endif %}" href="?davr=week">Hafta</a>
+  </div>
+
+  {% if leaders %}
+    {% if leaders|length >= 3 %}
+    <div class="podium">
+      {% with second=leaders.1 first=leaders.0 third=leaders.2 %}
+      <div class="podium-col silver">
+        <div class="medal">2</div>
+        <span class="avatar avatar-lg">
+          {% with tp=second.user.telegram_profile %}{% if tp.photo_url %}<img src="{{ tp.photo_url }}" alt="">{% else %}{{ second.user.first_name|default:second.user.username|slice:":1"|upper }}{% endif %}{% endwith %}
+        </span>
+        <div class="p-name">{{ second.user.first_name|default:second.user.username }}</div>
+        <div class="p-score">{{ second.views }} ta dars</div>
+      </div>
+      <div class="podium-col gold">
+        <div class="medal">1</div>
+        <span class="avatar avatar-xl">
+          {% with tp=first.user.telegram_profile %}{% if tp.photo_url %}<img src="{{ tp.photo_url }}" alt="">{% else %}{{ first.user.first_name|default:first.user.username|slice:":1"|upper }}{% endif %}{% endwith %}
+        </span>
+        <div class="p-name">{{ first.user.first_name|default:first.user.username }}</div>
+        <div class="p-score">{{ first.views }} ta dars</div>
+      </div>
+      <div class="podium-col bronze">
+        <div class="medal">3</div>
+        <span class="avatar avatar-lg">
+          {% with tp=third.user.telegram_profile %}{% if tp.photo_url %}<img src="{{ tp.photo_url }}" alt="">{% else %}{{ third.user.first_name|default:third.user.username|slice:":1"|upper }}{% endif %}{% endwith %}
+        </span>
+        <div class="p-name">{{ third.user.first_name|default:third.user.username }}</div>
+        <div class="p-score">{{ third.views }} ta dars</div>
+      </div>
+      {% endwith %}
+    </div>
+    {% endif %}
+
+    <div class="leader-table">
+      <div class="lt-head">
+        <div>O'rin</div>
+        <div>O'quvchi</div>
+        <div class="num">Ko'rilgan</div>
+        <div class="num">Tugatilgan</div>
+        <div class="num">Streak</div>
+      </div>
+      {% for l in leaders %}
+        <div class="lt-row {% if l.rank <= 3 %}top{% endif %}">
+          <div class="lt-rank">{{ l.rank }}</div>
+          <div class="lt-user">
+            <span class="avatar avatar-sm">
+              {% with tp=l.user.telegram_profile %}{% if tp.photo_url %}<img src="{{ tp.photo_url }}" alt="">{% else %}{{ l.user.first_name|default:l.user.username|slice:":1"|upper }}{% endif %}{% endwith %}
+            </span>
+            <span class="lt-name">{{ l.user.first_name|default:l.user.username }}</span>
+          </div>
+          <div class="num">{{ l.views }}</div>
+          <div class="num">{{ l.completed }}</div>
+          <div class="num">{% if l.streak %}🔥 {{ l.streak }}{% else %}—{% endif %}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>Reyting hozircha bo'sh</h3>
+      <p>Kurs darslarini boshlashingiz bilan reyting paydo bo'ladi.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

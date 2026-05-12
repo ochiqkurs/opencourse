@@ -4,57 +4,105 @@
 {% block title %}Kurslar – Ochiq Kurs{% endblock %}
 
 {% block content %}
-<div class="container" style="padding-top:8px">
-  <h1>Barcha kurslar</h1>
-  <p class="description">
-    {% if q %}
-      "<strong>{{ q }}</strong>" so'roviga {{ courses|length }} ta natija topildi.
-    {% elif active_category %}
-      <strong>{{ active_category.name }}</strong> kategoriyasidagi kurslar.
-    {% else %}
-      Sizga mos kursni tanlang va o'rganishni boshlang.
-    {% endif %}
-  </p>
-
-  <form class="filter-toolbar" method="get" id="filter-form">
-    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
-
-    <span class="filter-label">Kategoriya:</span>
-    <a class="chip {% if not active_category %}active{% endif %}" href="?{% if q %}q={{ q }}{% endif %}">Barchasi</a>
-    {% for cat in categories %}
-      <a class="chip {% if active_category and active_category.slug == cat.slug %}active{% endif %}"
-         href="?kategoriya={{ cat.slug }}{% if q %}&q={{ q }}{% endif %}">{{ cat.name }}</a>
-    {% endfor %}
-
-    <span class="filter-label" style="margin-left:12px">Daraja:</span>
-    <a class="chip {% if not active_level %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}{% endif %}{% if q %}&q={{ q }}{% endif %}">Barchasi</a>
-    {% for code, label in level_choices %}
-      <a class="chip {% if active_level == code %}active{% endif %}"
-         href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}daraja={{ code }}{% if q %}&q={{ q }}{% endif %}">{{ label }}</a>
-    {% endfor %}
-
-    <select class="sort-select" name="saralash" onchange="this.form.submit()">
-      <option value="popular" {% if active_sort == 'popular' %}selected{% endif %}>Mashhur</option>
-      <option value="new" {% if active_sort == 'new' %}selected{% endif %}>Yangi</option>
-      <option value="rating" {% if active_sort == 'rating' %}selected{% endif %}>Yuqori reyting</option>
-    </select>
-  </form>
-
-  {% if courses %}
-    <div class="card-grid">
-      {% for course in courses %}
-        {% include "learning/_course_card.html" %}
-      {% endfor %}
+<div class="catalog-page">
+  <div class="catalog-head">
+    <div class="catalog-head-inner">
+      <h1>
+        {% if q %}"<em>{{ q }}</em>" so'rovi bo'yicha kurslar
+        {% elif active_category %}{{ active_category.name }} kurslari
+        {% else %}Barcha kurslar{% endif %}
+      </h1>
+      <p class="catalog-sub">{{ courses|length }} ta kurs topildi. Sizga mos kursni tanlang va o'rganishni boshlang.</p>
     </div>
-  {% else %}
-    <div class="empty-state">
-      <div class="es-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  </div>
+
+  <div class="catalog-body">
+    <aside class="catalog-side">
+      <div class="cs-block">
+        <div class="cs-title">Kategoriyalar</div>
+        <ul class="cs-list">
+          <li><a class="{% if not active_category %}active{% endif %}" href="?{% if q %}q={{ q }}{% endif %}">Barchasi</a></li>
+          {% for cat in categories %}
+            <li><a class="{% if active_category and active_category.slug == cat.slug %}active{% endif %}"
+                   href="?kategoriya={{ cat.slug }}{% if q %}&q={{ q }}{% endif %}">{{ cat.name }}</a></li>
+          {% endfor %}
+        </ul>
       </div>
-      <h3>Hech narsa topilmadi</h3>
-      <p>Sizning so'rovingizga mos kurs topilmadi. Filtrlarni o'zgartirib ko'ring.</p>
-      <a href="{% url 'learning:course_list' %}" class="btn btn-secondary">Barcha kurslar</a>
+
+      <div class="cs-block">
+        <div class="cs-title">Daraja</div>
+        <ul class="cs-list">
+          <li><a class="{% if not active_level %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}{% endif %}{% if q %}{% if active_category %}&{% endif %}q={{ q }}{% endif %}">Barchasi</a></li>
+          {% for code, label in level_choices %}
+            <li><a class="{% if active_level == code %}active{% endif %}"
+                   href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}daraja={{ code }}{% if q %}&q={{ q }}{% endif %}">{{ label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="cs-block">
+        <div class="cs-title">Saralash</div>
+        <ul class="cs-list">
+          {% with sort_qs="?" %}
+          <li><a class="{% if active_sort == 'popular' %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}{% if active_level %}daraja={{ active_level }}&{% endif %}saralash=popular{% if q %}&q={{ q }}{% endif %}">Mashhur</a></li>
+          <li><a class="{% if active_sort == 'new' %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}{% if active_level %}daraja={{ active_level }}&{% endif %}saralash=new{% if q %}&q={{ q }}{% endif %}">Yangi</a></li>
+          <li><a class="{% if active_sort == 'rating' %}active{% endif %}" href="?{% if active_category %}kategoriya={{ active_category.slug }}&{% endif %}{% if active_level %}daraja={{ active_level }}&{% endif %}saralash=rating{% if q %}&q={{ q }}{% endif %}">Reyting</a></li>
+          {% endwith %}
+        </ul>
+      </div>
+
+      {% if active_category or active_level or q %}
+        <a class="btn btn-secondary btn-block btn-sm" href="{% url 'learning:course_list' %}">Filtrlarni tozalash</a>
+      {% endif %}
+    </aside>
+
+    <div class="catalog-main">
+      <div class="catalog-toolbar">
+        <div class="toolbar-tabs" role="tablist" data-view-toggle>
+          <button class="active" data-view="grid" aria-label="Karta ko'rinishi">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></svg>
+            Karta
+          </button>
+          <button data-view="list" aria-label="Ro'yxat ko'rinishi">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Ro'yxat
+          </button>
+        </div>
+        <div class="toolbar-results">{{ courses|length }} ta kurs</div>
+      </div>
+
+      {% if courses %}
+        <div class="card-grid" data-view-target>
+          {% for course in courses %}
+            {% include "learning/_course_card.html" %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <div class="es-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <h3>Hech narsa topilmadi</h3>
+          <p>Sizning so'rovingizga mos kurs topilmadi. Filtrlarni o'zgartirib ko'ring.</p>
+          <a href="{% url 'learning:course_list' %}" class="btn btn-secondary">Barcha kurslar</a>
+        </div>
+      {% endif %}
     </div>
-  {% endif %}
+  </div>
 </div>
+
+<script>
+(function(){
+  var toggle = document.querySelector('[data-view-toggle]');
+  var target = document.querySelector('[data-view-target]');
+  if (!toggle || !target) return;
+  toggle.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      toggle.querySelectorAll('button').forEach(function(x){ x.classList.toggle('active', x===b); });
+      target.classList.toggle('view-list', b.dataset.view === 'list');
+      target.classList.toggle('view-grid', b.dataset.view === 'grid');
+    });
+  });
+})();
+</script>
 {% endblock %}

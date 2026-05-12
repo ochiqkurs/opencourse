@@ -14,6 +14,17 @@
   <span>{{ lesson.title }}</span>
 </nav>
 
+{% if user.is_authenticated and course_total %}
+<div class="course-progress-strip">
+  <div class="cps-info">
+    <strong>{{ course.title }}</strong> ·
+    <span class="text-muted">{{ course_completed }} / {{ course_total }} dars tugatildi</span>
+  </div>
+  <div class="cps-bar"><div class="cps-fill" style="width: {{ course_percent }}%"></div></div>
+  <div class="cps-percent">{{ course_percent }}%</div>
+</div>
+{% endif %}
+
 <div class="lesson-main">
 
   <div class="video-wrapper">
@@ -21,23 +32,38 @@
   </div>
 
   <div class="lesson-title-row">
-    <h1>{{ lesson.title }}</h1>
-    {% if lesson.duration_seconds %}
-      <span class="badge">{{ lesson.duration_seconds|lesson_time }}</span>
-    {% endif %}
-    {% if progress.is_completed %}
-      <span class="completed-badge">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Tugatildi
-      </span>
-    {% endif %}
+    <div>
+      <h1>{{ lesson.title }}</h1>
+      <div class="lesson-sub-meta">
+        <span>{{ module.title }}</span>
+        {% if lesson.duration_seconds %}<span class="dot"></span><span>{{ lesson.duration_seconds|lesson_time }}</span>{% endif %}
+        {% if lesson.is_preview %}<span class="dot"></span><span class="badge badge-amber">Tanishtiruv</span>{% endif %}
+      </div>
+    </div>
+    <div class="ltr-actions">
+      {% if progress.is_completed %}
+        <span class="completed-badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Tugatildi
+        </span>
+      {% endif %}
+      {% if user.is_authenticated %}
+        <button type="button"
+                class="btn btn-ghost btn-sm ec-wishlist {% if is_wishlisted %}is-on{% endif %}"
+                data-toggle-wishlist
+                data-url="{% url 'learning:toggle_wishlist' course.slug %}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </button>
+      {% endif %}
+    </div>
   </div>
 
   <div class="ld-tabs" role="tablist">
     <button class="active" data-ld="desc">Tavsif</button>
     <button data-ld="notes">Eslatma</button>
-    <button data-ld="resources">Resurslar</button>
-    <button data-ld="qa">Savollar</button>
+    <button data-ld="resources">Resurslar {% if resources %}<span class="tab-count">{{ resources|length }}</span>{% endif %}</button>
+    <button data-ld="qa">Savol-javob {% if questions %}<span class="tab-count">{{ questions|length }}</span>{% endif %}</button>
+    {% if announcements %}<button data-ld="ann">E'lonlar <span class="tab-count">{{ announcements|length }}</span></button>{% endif %}
   </div>
 
   <div class="ld-panel active" data-ld-panel="desc">
@@ -67,22 +93,15 @@
   <div class="ld-panel" data-ld-panel="notes">
     {% if user.is_authenticated %}
       <div id="note-preview" class="note-preview md-content{% if not note_rendered %} note-hidden{% endif %}">{{ note_rendered }}</div>
-
       <button id="btn-edit-note" class="btn btn-secondary btn-sm{% if not note_rendered %} note-hidden{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         Tahrirlash
       </button>
-
       <div id="note-editor" class="note-editor{% if note_rendered %} note-hidden{% endif %}">
-        <textarea
-          id="note-content"
-          class="note-textarea"
-          placeholder="Markdown yozing... (```python kod ```)">{{ note.content|default:'' }}</textarea>
+        <textarea id="note-content" class="note-textarea" placeholder="Markdown yozing... (```python kod ```)">{{ note.content|default:'' }}</textarea>
         <div class="note-actions">
           <button id="btn-save-note" class="btn btn-primary btn-sm"
-            data-url="{% url 'learning:save_note' course.slug module.slug lesson.slug %}">
-            Saqlash
-          </button>
+            data-url="{% url 'learning:save_note' course.slug module.slug lesson.slug %}">Saqlash</button>
           <span id="note-status" class="note-status"></span>
         </div>
       </div>
@@ -94,24 +113,128 @@
   </div>
 
   <div class="ld-panel" data-ld-panel="resources">
-    <div class="empty-state">
-      <div class="es-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    {% if resources %}
+      <ul class="resource-list">
+        {% for r in resources %}
+          <li class="resource-item resource-kind-{{ r.kind }}">
+            <span class="ri-ico">
+              {% if r.kind == 'file' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              {% elif r.kind == 'code' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              {% elif r.kind == 'doc' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              {% else %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              {% endif %}
+            </span>
+            <a class="ri-link" href="{{ r.url }}" target="_blank" rel="noopener">
+              <span class="ri-title">{{ r.title }}</span>
+              <span class="ri-kind">{{ r.get_kind_display }}</span>
+            </a>
+            <span class="ri-go">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty-state">
+        <div class="es-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <h3>Resurslar hozircha qo'shilmagan</h3>
+        <p>O'qituvchi dars uchun qo'shimcha materiallarni qo'shganida shu yerda paydo bo'ladi.</p>
       </div>
-      <h3>Resurslar tez orada</h3>
-      <p>Bu dars uchun qo'shimcha materiallar hozircha qo'shilmagan.</p>
-    </div>
+    {% endif %}
   </div>
 
-  <div class="ld-panel" data-ld-panel="qa">
-    <div class="empty-state">
-      <div class="es-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  <div class="ld-panel" data-ld-panel="qa" id="qa">
+    {% if user.is_authenticated %}
+      <form class="qa-ask" method="post" action="{% url 'learning:ask_question' course.slug module.slug lesson.slug %}">
+        {% csrf_token %}
+        <div class="qa-ask-row">{{ question_form.title }}</div>
+        <div class="qa-ask-row">{{ question_form.body }}</div>
+        <div class="qa-ask-actions">
+          <span class="text-muted">Boshqalarga foydali bo'lishi uchun aniq savol bering.</span>
+          <button type="submit" class="btn btn-primary btn-sm">Savol yuborish</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="text-muted">Savol berish uchun <a href="{% url 'users:login' %}">saytga kiring</a>.</p>
+    {% endif %}
+
+    {% if questions %}
+      <ul class="qa-list">
+        {% for q in questions %}
+          <li class="qa-item" id="q{{ q.id }}">
+            <div class="qa-head">
+              <span class="avatar avatar-sm">{{ q.user.first_name|default:q.user.username|slice:":1"|upper }}</span>
+              <div class="qa-meta">
+                <div class="qa-author">{{ q.user.first_name|default:q.user.username }}</div>
+                <div class="qa-time">{{ q.created_at|date:"d M Y, H:i" }}</div>
+              </div>
+              {% if q.is_resolved %}<span class="qa-resolved">✓ Hal etilgan</span>{% endif %}
+            </div>
+            <div class="qa-title">{{ q.title }}</div>
+            {% if q.body %}<div class="qa-body">{{ q.body|linebreaksbr }}</div>{% endif %}
+
+            {% with answer_count=q.answers.count %}
+              {% if answer_count %}
+                <details class="qa-answers" {% if answer_count < 3 %}open{% endif %}>
+                  <summary>{{ answer_count }} ta javob</summary>
+                  <ul>
+                    {% for a in q.answers.all %}
+                      <li class="qa-answer">
+                        <div class="qa-head">
+                          <span class="avatar avatar-sm">{{ a.user.first_name|default:a.user.username|slice:":1"|upper }}</span>
+                          <div class="qa-meta">
+                            <div class="qa-author">
+                              {{ a.user.first_name|default:a.user.username }}
+                              {% if a.is_instructor %}<span class="qa-instructor">O'qituvchi</span>{% endif %}
+                            </div>
+                            <div class="qa-time">{{ a.created_at|date:"d M Y, H:i" }}</div>
+                          </div>
+                        </div>
+                        <div class="qa-body">{{ a.body|linebreaksbr }}</div>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </details>
+              {% endif %}
+            {% endwith %}
+
+            {% if user.is_authenticated %}
+              <form class="qa-reply" method="post" action="{% url 'learning:post_answer' course.slug module.slug lesson.slug q.id %}">
+                {% csrf_token %}
+                <textarea name="body" rows="2" required placeholder="Javob yozing..."></textarea>
+                <button type="submit" class="btn btn-secondary btn-sm">Javob berish</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty-state" style="margin-top:16px">
+        <h3>Hozircha savollar yo'q</h3>
+        <p>Bu dars yuzasidan birinchi savolni siz bering.</p>
       </div>
-      <h3>Savol-javob bo'limi tayyorlanmoqda</h3>
-      <p>Tez orada o'qituvchilar va boshqa o'quvchilarga savol bera olasiz.</p>
+    {% endif %}
+  </div>
+
+  {% if announcements %}
+  <div class="ld-panel" data-ld-panel="ann">
+    <div class="announce-list">
+      {% for a in announcements %}
+        <div class="announce-item">
+          <div class="ai-title">{% if a.is_pinned %}<span class="ai-pin">📌</span> {% endif %}{{ a.title }}</div>
+          <div class="ai-body">{{ a.body|linebreaksbr }}</div>
+          <div class="ai-meta">{{ a.created_at|date:"d M Y" }}</div>
+        </div>
+      {% endfor %}
     </div>
   </div>
+  {% endif %}
 
   <div class="lesson-nav">
     {% if prev_lesson %}
@@ -155,15 +278,15 @@
   if (window.hljs) hljs.highlightAll();
 }());
 
-// Lesson detail tab switching
 (function() {
+  function activate(name) {
+    document.querySelectorAll('.ld-tabs button').forEach(function(x){ x.classList.toggle('active', x.dataset.ld === name); });
+    document.querySelectorAll('.ld-panel').forEach(function(p){ p.classList.toggle('active', p.dataset.ldPanel === name); });
+  }
   document.querySelectorAll('.ld-tabs button').forEach(function(b){
-    b.addEventListener('click', function(){
-      var name = b.dataset.ld;
-      document.querySelectorAll('.ld-tabs button').forEach(function(x){ x.classList.toggle('active', x === b); });
-      document.querySelectorAll('.ld-panel').forEach(function(p){ p.classList.toggle('active', p.dataset.ldPanel === name); });
-    });
+    b.addEventListener('click', function(){ activate(b.dataset.ld); });
   });
+  if (location.hash === '#qa' || location.hash.indexOf('#q') === 0) activate('qa');
 })();
 </script>
 

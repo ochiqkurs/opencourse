@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
+    Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
 )
 
 
@@ -82,3 +83,36 @@ class CourseReviewAdmin(admin.ModelAdmin):
 class CertificateAdmin(admin.ModelAdmin):
     list_display = ['code', 'user', 'course', 'issued_at']
     search_fields = ['code', 'user__username', 'course__title']
+
+
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ['user', 'course', 'created_at']
+    search_fields = ['user__username', 'course__title']
+
+
+@admin.register(LessonResource)
+class LessonResourceAdmin(admin.ModelAdmin):
+    list_display = ['lesson', 'title', 'kind', 'order']
+    list_filter = ['kind']
+    search_fields = ['title', 'lesson__title']
+
+
+@admin.register(LessonQuestion)
+class LessonQuestionAdmin(admin.ModelAdmin):
+    list_display = ['title', 'lesson', 'user', 'is_resolved', 'created_at']
+    list_filter = ['is_resolved']
+    search_fields = ['title', 'body', 'user__username']
+
+
+@admin.register(LessonAnswer)
+class LessonAnswerAdmin(admin.ModelAdmin):
+    list_display = ['question', 'user', 'is_instructor', 'created_at']
+    list_filter = ['is_instructor']
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ['title', 'course', 'is_pinned', 'created_at']
+    list_filter = ['is_pinned', 'course']
+    search_fields = ['title', 'body']

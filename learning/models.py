@@ -277,3 +277,89 @@ class Certificate(models.Model):
 
     def __str__(self):
         return f"Cert {self.code} – {self.user.username} / {self.course.title}"
+
+
+class Wishlist(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wishlist_items')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='wishlisted_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'course')]
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['user', '-created_at'])]
+
+    def __str__(self):
+        return f"{self.user.username} ♥ {self.course.title}"
+
+
+class LessonResource(models.Model):
+    KIND_CHOICES = [
+        ('link', 'Havola'),
+        ('file', 'Fayl'),
+        ('code', 'Kod'),
+        ('doc',  'Hujjat'),
+    ]
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='resources')
+    title = models.CharField(max_length=180)
+    url = models.URLField(max_length=500)
+    kind = models.CharField(max_length=8, choices=KIND_CHOICES, default='link')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.lesson.title} → {self.title}"
+
+
+class LessonQuestion(models.Model):
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='questions')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='lesson_questions')
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_resolved = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['lesson', '-created_at'])]
+
+    def __str__(self):
+        return f"Q: {self.title[:40]}"
+
+
+class LessonAnswer(models.Model):
+    question = models.ForeignKey(LessonQuestion, on_delete=models.CASCADE, related_name='answers')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='lesson_answers')
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_instructor = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['question', 'created_at'])]
+
+    def __str__(self):
+        return f"A by {self.user.username} on {self.question_id}"
+
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    course = models.ForeignKey(
+        Course, on_delete=models.CASCADE, related_name='announcements',
+        null=True, blank=True,
+        help_text='Bo\'sh qoldirilsa — global e\'lon (barcha kurslar uchun).',
+    )
+    is_pinned = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_pinned', '-created_at']
+        indexes = [models.Index(fields=['course', '-created_at'])]
+
+    def __str__(self):
+        scope = self.course.title if self.course else 'Global'
+        return f"[{scope}] {self.title}"

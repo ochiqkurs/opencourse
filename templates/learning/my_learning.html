@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}Mening kurslarim — Ochiq Kurs{% endblock %}
+
+{% block content %}
+<div class="container" style="padding-top:8px">
+  <div class="page-head">
+    <div>
+      <h1>Mening kurslarim</h1>
+      <p class="text-muted">Siz yozilgan barcha kurslar va ulardagi taraqqiyot.</p>
+    </div>
+    <a href="{% url 'learning:course_list' %}" class="btn btn-secondary">Yana kurslar qo'shish</a>
+  </div>
+
+  <div class="learn-tabs">
+    {% with base=request.path %}
+      <a class="{% if filter_tab == 'all' %}active{% endif %}" href="{{ base }}">Barchasi <span class="lt-c">{{ total_enrollments }}</span></a>
+      <a class="{% if filter_tab == 'in_progress' %}active{% endif %}" href="?holat=in_progress">Davom etayotgan</a>
+      <a class="{% if filter_tab == 'not_started' %}active{% endif %}" href="?holat=not_started">Boshlanmagan</a>
+      <a class="{% if filter_tab == 'completed' %}active{% endif %}" href="?holat=completed">Tugatilgan</a>
+    {% endwith %}
+  </div>
+
+  {% if cards %}
+    <div class="my-learn-grid">
+      {% for it in cards %}
+        <article class="ml-card">
+          <a class="ml-thumb" href="{% url 'learning:course_detail' it.course.slug %}">
+            {% with thumb=it.course.get_thumbnail_url %}
+              {% if thumb %}<img src="{{ thumb }}" alt="">{% endif %}
+            {% endwith %}
+            <div class="ml-overlay">
+              <div class="ml-percent">{{ it.percent }}%</div>
+            </div>
+          </a>
+          <div class="ml-body">
+            {% if it.course.category %}<div class="ml-cat">{{ it.course.category.name }}</div>{% endif %}
+            <h3 class="ml-title">
+              <a href="{% url 'learning:course_detail' it.course.slug %}">{{ it.course.title }}</a>
+            </h3>
+            <div class="ml-meta">{{ it.done }} / {{ it.total }} dars · {{ it.course.instructor_display }}</div>
+            <div class="progress-bar-track"><div class="progress-bar-fill" style="width: {{ it.percent }}%"></div></div>
+            <div class="ml-actions">
+              {% if it.percent >= 100 %}
+                <a href="{% url 'learning:certificate' it.course.slug %}" class="btn btn-outline-primary btn-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                  Sertifikat
+                </a>
+              {% else %}
+                <a href="{% url 'learning:course_detail' it.course.slug %}" class="btn btn-primary btn-sm">
+                  {% if it.percent > 0 %}Davom etish{% else %}Boshlash{% endif %} →
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="es-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      </div>
+      <h3>Hozircha kurs yo'q</h3>
+      <p>Birinchi kursingizni tanlang va o'rganishni boshlang.</p>
+      <a href="{% url 'learning:course_list' %}" class="btn btn-primary">Kurslarni ko'rish</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
