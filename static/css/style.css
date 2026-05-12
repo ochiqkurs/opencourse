@@ -1538,13 +1538,11 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .module-lesson-item.completed .lesson-title { color: var(--muted); }
 
 /* ── Lesson Detail ────────────────────────────────────────── */
-.lesson-grid {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 28px;
+.lesson-main {
+  max-width: 960px;
+  margin: 0 auto;
+  min-width: 0;
 }
-@media (max-width: 1100px) { .lesson-grid { grid-template-columns: 1fr; } }
-.lesson-main { min-width: 0; }
 .video-wrapper {
   position: relative;
   width: 100%;
@@ -1609,38 +1607,16 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .lesson-nav .ln-btn .ln-meta { font-size: .72rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
 .lesson-nav .ln-btn .ln-title { font-weight: 700; font-size: .95rem; color: var(--text); }
 
-/* Notes panel */
-.lesson-notes-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 0;
-  position: sticky;
-  top: calc(var(--nav-h) + 20px);
-  align-self: flex-start;
-  max-height: calc(100vh - var(--nav-h) - 32px);
-  overflow-y: auto;
-}
-.notes-panel-inner { padding: 20px 22px; }
-.notes-panel-header {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-weight: 700;
-  font-size: 1.02rem;
-  color: var(--text);
-  margin: 0 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* Notes (now lives inside a tab panel) */
 .note-textarea {
   width: 100%;
-  min-height: 180px;
-  padding: 12px 14px;
+  min-height: 220px;
+  padding: 14px 16px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   background: var(--surface-2);
   font-family: 'JetBrains Mono', SFMono-Regular, ui-monospace, monospace;
-  font-size: .88rem;
+  font-size: .9rem;
   color: var(--text);
   resize: vertical;
   line-height: 1.5;
@@ -1651,8 +1627,10 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   background: var(--surface);
 }
 .note-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.note-status { font-size: .78rem; color: var(--muted); }
-.note-preview { margin-bottom: 12px; }
+.note-status { font-size: .82rem; color: var(--muted); }
+.note-status.note-status-ok { color: var(--brand-700); }
+.note-status.note-status-error { color: var(--danger); }
+.note-preview { margin-bottom: 14px; }
 .note-hidden { display: none !important; }
 
 .ld-tabs {

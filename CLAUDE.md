@@ -193,7 +193,8 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ### Notes
 - One note per user per lesson (`unique_together(user, lesson)`)
 - Stored as raw Markdown, rendered via `learning/utils.py` (markdown → bleach sanitization)
-- Unauthenticated users see the notes panel but cannot save
+- Notes live inside the `Eslatma` tab on the lesson page (one of `Tavsif` / `Eslatma` / `Resurslar` / `Savollar`); there is no longer a sticky side panel. Markup IDs (`note-preview`, `note-editor`, `note-content`, `btn-edit-note`, `btn-save-note`, `note-status`) are preserved so `lesson_notes.js` keeps working.
+- Unauthenticated users see an empty-state prompt inside the tab; they cannot save.
 
 ### Admin Bulk Create
 - Accepts nested JSON: `course → modules → lessons` with YouTube video IDs
