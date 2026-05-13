@@ -236,6 +236,9 @@ html[data-theme="dark"] {
   font-size: .92rem;
   transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
 }
+.navbar-search input[type="search"] {
+  padding: 0 14px 0 40px;
+}
 .navbar-search input::placeholder { color: var(--muted); }
 .navbar-search input:focus {
   outline: none;
@@ -787,6 +790,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   aspect-ratio: 16 / 9;
   background: linear-gradient(135deg, var(--brand-100), var(--brand-300));
   overflow: hidden;
+  flex-shrink: 0;
 }
 .course-card-thumb img {
   width: 100%; height: 100%;
@@ -2455,7 +2459,7 @@ html[data-theme="dark"] .announce-bar {
 
 /* ── Course card heart + price ───────────────────────────── */
 .course-card { position: relative; }
-.course-card-link { display: block; color: inherit; text-decoration: none; }
+.course-card-link { display: flex; flex-direction: column; flex: 1; color: inherit; text-decoration: none; }
 .course-card-heart {
   position: absolute; top: 10px; right: 10px;
   width: 32px; height: 32px;
@@ -2487,7 +2491,7 @@ html[data-theme="dark"] .course-card-price { color: var(--brand-300); }
   grid-template-columns: 280px 1fr;
   gap: 20px;
 }
-.card-grid.view-list .course-card-thumb { height: 100%; aspect-ratio: 16/9; }
+.card-grid.view-list .course-card-thumb { aspect-ratio: auto; height: 100%; min-width: 0; }
 .card-grid.view-list .course-card-body { padding: 18px 20px; }
 @media (max-width: 720px) {
   .card-grid.view-list .course-card-link { grid-template-columns: 1fr; }
@@ -2906,8 +2910,7 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 /* ── Card animations ──────────────────────────────────────────── */
 .card-grid .course-card {
   opacity: 0;
-  transform: translateY(12px);
-  animation: card-fade-in 0.4s ease forwards;
+  animation: card-fade-in 0.35s ease forwards;
 }
 .card-grid .course-card:nth-child(1) { animation-delay: 0ms; }
 .card-grid .course-card:nth-child(2) { animation-delay: 40ms; }
@@ -2918,17 +2921,20 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 .card-grid .course-card:nth-child(7) { animation-delay: 240ms; }
 .card-grid .course-card:nth-child(8) { animation-delay: 280ms; }
 @keyframes card-fade-in {
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; }
 }
 
 /* ── Tab panel transitions ────────────────────────────────────── */
 .ld-panel {
   display: none;
   opacity: 0;
+  padding: 20px 0;
 }
 .ld-panel.active {
   display: block;
-  animation: panel-slide-in 0.25s ease;
+  opacity: 1;
+  padding: 20px 0;
+  animation: panel-slide-in 0.25s ease forwards;
 }
 @keyframes panel-slide-in {
   from { opacity: 0; transform: translateY(8px); }
