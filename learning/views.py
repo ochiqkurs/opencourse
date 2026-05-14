@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import transaction
 from django.db.models import Count, Sum, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
@@ -232,7 +233,7 @@ class CourseListView(View):
             active_category = next((c for c in categories if c.slug == category_slug), None)
 
         # Pagination — 24 per page
-        paginator = Paginator(list(qs), 24)
+        paginator = Paginator(qs, 24)
         page = request.GET.get('sahifa', 1)
         try:
             page_obj = paginator.page(page)
@@ -1021,7 +1022,10 @@ def save_bookmark(request, course_slug, module_slug, lesson_slug):
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    timestamp = int(data.get('timestamp', 0))
+    try:
+        timestamp = int(data.get('timestamp', 0))
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid timestamp'}, status=400)
     note_text = data.get('note', '').strip()
     bookmark = VideoBookmark.objects.create(
         user=request.user,
@@ -1117,6 +1121,7 @@ def quiz_attempt_view(request, course_slug, module_slug, lesson_slug, quiz_id, a
 
 
 @login_required
+@transaction.atomic
 def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -1142,7 +1147,7 @@ def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, 
             try:
                 selected_choice = q_data.choices.get(id=int(selected_id))
                 is_correct = selected_choice.is_correct
-            except QuizChoice.DoesNotExist:
+            except (QuizChoice.DoesNotExist, ValueError):
                 pass
         QuizAnswer.objects.create(
             attempt=attempt,

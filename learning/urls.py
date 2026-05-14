@@ -86,6 +86,11 @@ urlpatterns = [
         name='certificate',
     ),
     path(
+        '<slug:course_slug>/sevimli/',
+        views.toggle_wishlist,
+        name='toggle_wishlist',
+    ),
+    path(
         '<slug:course_slug>/<slug:module_slug>/',
         views.ModuleDetailView.as_view(),
         name='module_detail',
@@ -109,11 +114,6 @@ urlpatterns = [
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/davom/korildi/',
         views.record_view,
         name='record_view',
-    ),
-    path(
-        '<slug:course_slug>/sevimli/',
-        views.toggle_wishlist,
-        name='toggle_wishlist',
     ),
     path(
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/',
