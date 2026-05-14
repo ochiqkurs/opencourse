@@ -892,8 +892,16 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
 /* Stars */
 .stars-glyphs { color: var(--accent-500); font-size: 1rem; letter-spacing: 1px; }
 
-.star-input { display: inline-flex; flex-direction: row-reverse; gap: 2px; }
-.star-input input { display: none; }
+.star-input { display: inline-flex; flex-direction: row-reverse; gap: 2px; position: relative; }
+.star-input input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .star-input label {
   cursor: pointer; font-size: 1.8rem; color: var(--gray-300);
   transition: color var(--t-fast); margin: 0; padding: 0 2px;
@@ -902,6 +910,11 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
 .star-input label:hover ~ label,
 .star-input input:checked ~ label {
   color: var(--accent-500);
+}
+.star-input input:focus-visible + label {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* Grids */
@@ -3104,10 +3117,25 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
   padding: 10px 14px; border: 1px solid var(--border);
   border-radius: var(--r-sm); cursor: pointer;
   transition: border-color .15s, background .15s;
+  position: relative;
 }
 .qq-choice:hover { border-color: var(--brand-300); background: var(--brand-50); }
 .qq-choice.qq-selected { border-color: var(--brand-500); background: var(--brand-50); }
-.qq-choice input[type="radio"] { display: none; }
+.qq-choice input[type="radio"]:focus-visible { outline: none; }
+.qq-choice:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.qq-choice input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .qq-radio {
   width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
   flex-shrink: 0; transition: border-color .15s, background .15s;

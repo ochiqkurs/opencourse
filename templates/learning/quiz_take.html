@@ -25,32 +25,15 @@
       <div class="qq-num">{{ forloop.counter }}</div>
       <div class="qq-body">
         <div class="qq-text">{{ q.text }}</div>
-        {% if q.question_type == 'true_false' %}
-          <div class="qq-choices">
-            <label class="qq-choice">
-              <input type="radio" name="q_{{ q.id }}" value="">
-              <span class="qq-radio"></span>
-              <span class="qq-label">To'g'ri</span>
-            </label>
-            {% for c in q.choices.all %}
-            <label class="qq-choice">
-              <input type="radio" name="q_{{ q.id }}" value="{{ c.id }}">
-              <span class="qq-radio"></span>
-              <span class="qq-label">{{ c.text }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="qq-choices">
-            {% for c in q.choices.all %}
-            <label class="qq-choice">
-              <input type="radio" name="q_{{ q.id }}" value="{{ c.id }}">
-              <span class="qq-radio"></span>
-              <span class="qq-label">{{ c.text }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        {% endif %}
+        <div class="qq-choices">
+          {% for c in q.choices.all %}
+          <label class="qq-choice">
+            <input type="radio" name="q_{{ q.id }}" value="{{ c.id }}">
+            <span class="qq-radio"></span>
+            <span class="qq-label">{{ c.text }}</span>
+          </label>
+          {% endfor %}
+        </div>
       </div>
     </div>
     {% endfor %}

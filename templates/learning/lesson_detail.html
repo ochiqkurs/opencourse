@@ -340,7 +340,16 @@
 }
 </script>
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script>
+(function(){
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/' + (isDark ? 'github-dark' : 'github') + '.min.css';
+  document.head.appendChild(link);
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
 (function () {
@@ -370,6 +379,6 @@
 <script src="{% static 'js/lesson_notes.js' %}"></script>
 {% endif %}
 {% if lesson.lesson_type == 'video' %}
-<script src="{% static 'js/lesson_bookmarks.js' %}" defer></script>
+<script src="{% static 'js/lesson_bookmarks.js' %}"></script>
 {% endif %}
 {% endblock %}
