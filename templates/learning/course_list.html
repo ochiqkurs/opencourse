@@ -12,7 +12,7 @@
         {% elif active_category %}{{ active_category.name }} kurslari
         {% else %}Barcha kurslar{% endif %}
       </h1>
-      <p class="catalog-sub">{{ courses|length }} ta kurs topildi. Sizga mos kursni tanlang va o'rganishni boshlang.</p>
+      <p class="catalog-sub">{{ page_obj.paginator.count }} ta kurs topildi. Sizga mos kursni tanlang va o'rganishni boshlang.</p>
     </div>
   </div>
 
@@ -68,7 +68,7 @@
             Ro'yxat
           </button>
         </div>
-        <div class="toolbar-results">{{ courses|length }} ta kurs</div>
+        <div class="toolbar-results">{{ page_obj.paginator.count }} ta kurs</div>
       </div>
 
       {% if courses %}
@@ -77,6 +77,17 @@
             {% include "learning/_course_card.html" %}
           {% endfor %}
         </div>
+        {% if is_paginated %}
+        <nav class="pagination">
+          {% if page_obj.has_previous %}
+          <a class="page-btn" href="?sahifa={{ page_obj.previous_page_number }}{% if active_category %}&kategoriya={{ active_category.slug }}{% endif %}{% if active_level %}&daraja={{ active_level }}{% endif %}{% if active_sort != 'popular' %}&saralash={{ active_sort }}{% endif %}{% if q %}&q={{ q }}{% endif %}">← Oldingi</a>
+          {% endif %}
+          <span class="page-info">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+          <a class="page-btn" href="?sahifa={{ page_obj.next_page_number }}{% if active_category %}&kategoriya={{ active_category.slug }}{% endif %}{% if active_level %}&daraja={{ active_level }}{% endif %}{% if active_sort != 'popular' %}&saralash={{ active_sort }}{% endif %}{% if q %}&q={{ q }}{% endif %}">Keyingi →</a>
+          {% endif %}
+        </nav>
+        {% endif %}
       {% else %}
         <div class="empty-state">
           <div class="es-icon">

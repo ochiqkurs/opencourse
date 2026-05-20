@@ -3,6 +3,7 @@
 
   var cfg = JSON.parse(document.getElementById('lesson-config').textContent);
   var IS_AUTH      = cfg.is_authenticated;
+  var IS_ARTICLE   = cfg.is_article;
   var VIDEO_ID     = cfg.video_id;
   var URL_RECORD   = cfg.url_record;
   var URL_COMPLETE = cfg.url_complete;
@@ -10,11 +11,15 @@
 
   var recorded = false;
 
+  // ── Article lessons: auto-record view on page load ──────
+  if (IS_ARTICLE) {
+    if (IS_AUTH) recordView();
+    return;  // No YouTube player needed
+  }
+
   // ── YouTube IFrame API ──────────────────────────────────
-  // Only used to detect "play started" so we can fire one POST and (server-side)
-  // record a daily LessonView + mark progress complete. No seek/heartbeat/beacon.
   window.onYouTubeIframeAPIReady = function () {
-    new YT.Player('yt-player', {
+    var player = new YT.Player('yt-player', {
       videoId: VIDEO_ID,
       playerVars: { rel: 0, modestbranding: 1 },
       events: {
@@ -23,6 +28,8 @@
         },
       },
     });
+    // Expose player reference for bookmark JS
+    if (window.__bmSetPlayer) window.__bmSetPlayer(player);
   };
 
   function recordView() {
@@ -33,7 +40,7 @@
       headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
       body: '{}',
       keepalive: true,
-    }).catch(function () { recorded = false; });  // allow retry on next play
+    }).catch(function () { recorded = false; });
   }
 
   // ── Manual "mark complete" button ───────────────────────

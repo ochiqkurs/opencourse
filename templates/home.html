@@ -18,6 +18,90 @@
 </div>
 {% endif %}
 
+{% if user.is_authenticated and continue_learning %}
+<!-- ── Continue Learning ────────────────────────────────── -->
+<section class="section section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Assalomu alaykum, {{ user.first_name|default:user.username }} 👋</h2>
+        <p class="section-sub">O'rganishni davom ettiring</p>
+      </div>
+      <a class="section-link" href="{% url 'learning:my_learning' %}">Barcha kurslarim <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </div>
+    <div class="continue-row">
+      {% for item in continue_learning %}
+      <a class="continue-card-mini" href="{% url 'learning:course_detail' item.course.slug %}">
+        <div class="ccm-thumb-wrap">
+          {% if item.course.get_thumbnail_url %}<img src="{{ item.course.get_thumbnail_url }}" alt="" loading="lazy">{% endif %}
+        </div>
+        <div class="ccm-body">
+          <h4>{{ item.course.title }}</h4>
+          <div class="progress-bar-track"><div class="progress-bar-fill" style="width:{{ item.percent }}%"></div></div>
+          <span class="text-muted" style="font-size:.82rem">{{ item.percent }}% · {{ item.done }}/{{ item.total }} dars</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% if recent_activity %}
+    <p class="text-muted" style="margin-top:12px;font-size:.85rem">
+      So'nggi faollik:
+      {% for act in recent_activity %}<a href="{% url 'learning:lesson_detail' act.course.slug act.lesson.module.slug act.lesson.slug %}">{{ act.lesson.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if user.is_authenticated %}
+<!-- ── Recommended ──────────────────────────────────────── -->
+{% if recommended %}
+<section class="section section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Sizga yoqishi mumkin</h2>
+        <p class="section-sub">O'qigan kurslaringiz asosida tavsiya qilamiz.</p>
+      </div>
+    </div>
+    <div class="card-row">
+      {% for course in recommended %}
+        {% include "learning/_course_card.html" %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+
+{% if learning_paths %}
+<!-- ── Learning Paths ───────────────────────────────────── -->
+<section class="section section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>Yo'nalishlar</h2>
+        <p class="section-sub">Bir necha kursdan iborat to'plamlar bilan chuqur o'rganing.</p>
+      </div>
+      <a class="section-link" href="{% url 'learning:learning_path_list' %}">Barchasi <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    </div>
+    <div class="card-row">
+      {% for path in learning_paths %}
+      <a class="path-card" href="{% url 'learning:learning_path_detail' path.slug %}">
+        <div class="path-card-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+        <h3>{{ path.title }}</h3>
+        <p>{{ path.description|truncatechars:100 }}</p>
+        <span class="path-meta">{{ path.course_count }} ta kurs</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if not user.is_authenticated %}
 <!-- ── Hero ─────────────────────────────────────────────── -->
 <section class="hero-pro">
   <div class="hero-pro-inner">
@@ -85,6 +169,7 @@
     </div>
   </div>
 </section>
+{% endif %}
 
 <!-- ── Trust strip ─────────────────────────────────────── -->
 <section class="trust-strip">

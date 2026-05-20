@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Sertifikat – {{ path_obj.title }}{% endblock %}
+
+{% block content %}
+<div class="certificate-page">
+  <div class="cert-card">
+    <div class="cert-header">
+      <div class="cert-logo">Ochiq Kurs</div>
+      <div class="cert-title">Yo'nalish sertifikati</div>
+    </div>
+
+    <div class="cert-body">
+      <p class="cert-to">Quyidagi shaxsga taqdim etiladi:</p>
+      <h2 class="cert-name">{{ full_name }}</h2>
+      <p class="cert-for">
+        <strong>{{ path_obj.title }}</strong> yo'nalishidagi barcha kurslarni muvaffaqiyatli tamomlagani uchun.
+      </p>
+    </div>
+
+    <div class="cert-footer">
+      <div class="cert-code">
+        <span class="cert-code-label">Sertifikat kodi:</span>
+        <span class="cert-code-value">{{ certificate.code }}</span>
+      </div>
+      <div class="cert-date">
+        Berilgan sana: {{ certificate.issued_at|date:"d M Y" }}
+      </div>
+    </div>
+  </div>
+
+  <div class="cert-actions">
+    <button class="btn btn-primary" onclick="window.print()">Chop etish</button>
+    <a href="{% url 'learning:learning_path_detail' path_obj.slug %}" class="btn btn-secondary">Yo'nalishga qaytish</a>
+  </div>
+</div>
+{% endblock %}

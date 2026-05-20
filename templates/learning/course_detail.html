@@ -39,7 +39,13 @@
 
       <div class="ch-instructor">
         <span class="avatar avatar-sm">{{ course.instructor_display|initials }}</span>
-        <span>O'qituvchi: <strong style="color:#fff">{{ course.instructor_display }}</strong></span>
+        <span>O'qituvchi: <strong style="color:#fff">
+          {% if course.instructor %}
+          <a href="{% url 'learning:instructor_detail' course.instructor.username %}" style="color:#fff;text-decoration:underline;text-underline-offset:3px">{{ course.instructor_display }}</a>
+          {% else %}
+          {{ course.instructor_display }}
+          {% endif %}
+        </strong></span>
       </div>
     </div>
 
@@ -125,7 +131,7 @@
             <a href="#" aria-label="Telegram" onclick="navigator.share?navigator.share({url:location.href,title:'{{ course.title|escapejs }}'}):null;return false;" title="Ulashish">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             </a>
-            <a href="#" onclick="navigator.clipboard.writeText(location.href);alert('Havola nusxalandi');return false;" title="Havolani nusxalash">
+            <a href="#" onclick="if(navigator.clipboard){navigator.clipboard.writeText(location.href);alert('Havola nusxalandi')}else{prompt('Havolani nusxalash uchun:',location.href)}return false;" title="Havolani nusxalash">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </a>
           </div>
@@ -231,6 +237,8 @@
               <span class="lesson-status">
                 {% if lesson.progress and lesson.progress.is_completed %}
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {% elif lesson.lesson_type == 'quiz' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 {% else %}
                   {{ forloop.counter }}
                 {% endif %}
@@ -242,7 +250,11 @@
                 {% endif %}
               </span>
               <span style="color:var(--muted)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                {% if lesson.lesson_type == 'quiz' %}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                {% else %}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                {% endif %}
               </span>
             </a>
           </li>
@@ -330,7 +342,13 @@
       <div style="display:flex;gap:18px;align-items:center;margin-bottom:14px">
         <span class="avatar avatar-lg">{{ course.instructor_display|initials }}</span>
         <div>
-          <h2 style="margin:0 0 4px">{{ course.instructor_display }}</h2>
+          <h2 style="margin:0 0 4px">
+            {% if course.instructor %}
+            <a href="{% url 'learning:instructor_detail' course.instructor.username %}" style="color:inherit;text-decoration:none">{{ course.instructor_display }}</a>
+            {% else %}
+            {{ course.instructor_display }}
+            {% endif %}
+          </h2>
           <div class="text-muted">{{ course.category.name|default:"Mutaxassis" }} · Ochiq Kurs jamoasi</div>
         </div>
       </div>
@@ -356,6 +374,11 @@
   if (location.hash && wrap.querySelector('[data-panel="' + location.hash.slice(1) + '"]')) {
     activate(location.hash.slice(1));
   }
+  window.addEventListener('hashchange', function () {
+    if (location.hash && wrap.querySelector('[data-panel="' + location.hash.slice(1) + '"]')) {
+      activate(location.hash.slice(1));
+    }
+  });
 })();
 </script>
 {% endblock %}

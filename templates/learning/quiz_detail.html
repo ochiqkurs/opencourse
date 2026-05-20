@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}{{ quiz.title }} – {{ lesson.title }}{% endblock %}
+
+{% block content %}
+
+<nav class="breadcrumb">
+  <a href="{% url 'learning:course_detail' course.slug %}">{{ course.title }}</a>
+  <span class="sep">›</span>
+  <a href="{% url 'learning:module_detail' course.slug module.slug %}">{{ module.title }}</a>
+  <span class="sep">›</span>
+  <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">{{ lesson.title }}</a>
+  <span class="sep">›</span>
+  <span>{{ quiz.title }}</span>
+</nav>
+
+<div class="quiz-page">
+  <div class="quiz-hero">
+    <div class="quiz-hero-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <h1>{{ quiz.title }}</h1>
+    {% if quiz.description %}<p class="quiz-hero-desc">{{ quiz.description }}</p>{% endif %}
+    <div class="quiz-hero-meta">
+      <span>{{ questions_count }} ta savol</span>
+      <span class="dot"></span>
+      <span>O'tish bali: {{ quiz.pass_percent }}%</span>
+      {% if quiz.max_attempts > 0 %}
+      <span class="dot"></span>
+      <span>Max {{ quiz.max_attempts }} ta urinish</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if user.is_authenticated %}
+    {% if attempts_remaining == 0 %}
+      <div class="quiz-limit-warn">
+        <p>Ushbu test uchun barcha urinishlardan foydalanib bo'ldingiz.</p>
+      </div>
+    {% else %}
+      <form method="post" action="{% url 'learning:start_quiz' course.slug module.slug lesson.slug quiz.id %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-lg quiz-start-btn">Testni boshlash</button>
+      </form>
+    {% endif %}
+
+    {% if past_attempts %}
+    <div class="quiz-history">
+      <h3>Avvalgi urinishlar</h3>
+      <table class="quiz-history-table">
+        <thead>
+          <tr>
+            <th>Sana</th>
+            <th>Natija</th>
+            <th>Holat</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in past_attempts %}
+          <tr>
+            <td>{{ a.completed_at|date:"d M Y, H:i" }}</td>
+            <td>{{ a.score|floatformat:0 }} / {{ a.max_score }} ({{ a.percentage }}%)</td>
+            <td>
+              {% if a.passed %}
+                <span class="badge badge-green">O'tdi</span>
+              {% else %}
+                <span class="badge badge-red">O'tmadi</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'learning:quiz_result' course.slug module.slug lesson.slug quiz.id a.id %}" class="btn btn-ghost btn-sm">Ko'rish</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="text-muted">Test topshirish uchun <a href="{% url 'users:login' %}">saytga kiring</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -4,8 +4,10 @@ import pytz
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import transaction
 from django.db.models import Count, Sum, Q
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +18,9 @@ from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
     Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
+    Quiz, QuizAttempt, QuizAnswer, QuizQuestion, QuizChoice,
+    LearningPath, LearningPathCourse, LearningPathEnrollment, LearningPathCertificate,
+    VideoBookmark,
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
 from .utils import render_markdown
@@ -50,9 +55,11 @@ class HomeView(View):
     template_name = 'home.html'
 
     def get(self, request):
+        user = request.user
+        published = Course.objects.filter(status='published')
         all_courses = list(
             _course_card_annotations(
-                Course.objects.select_related('category')
+                published.select_related('category')
             ).order_by('-is_featured', 'order')
         )
 
@@ -63,12 +70,12 @@ class HomeView(View):
         trending = sorted(all_courses, key=lambda c: (c.student_count or 0), reverse=True)[:8]
         newest = list(
             _course_card_annotations(
-                Course.objects.select_related('category')
+                published.select_related('category')
             ).order_by('-id')[:8]
         )
         top_rated = list(
             _course_card_annotations(
-                Course.objects.filter(rating_count__gt=0)
+                published.filter(rating_count__gt=0)
                 .select_related('category')
             ).order_by('-avg_rating', '-rating_count')[:8]
         )
@@ -80,7 +87,7 @@ class HomeView(View):
         total_hours = round(total_seconds / 3600)
         total_users = User.objects.filter(is_active=True).count()
         total_lessons = Lesson.objects.count()
-        total_courses = Course.objects.count()
+        total_courses = published.count()
 
         categories = list(
             Category.objects.annotate(c=Count('courses')).order_by('order', 'name')
@@ -104,6 +111,70 @@ class HomeView(View):
             if cat_courses:
                 category_strips.append({'category': cat, 'courses': cat_courses})
 
+        # Featured learning paths
+        learning_paths = list(
+            LearningPath.objects.filter(is_featured=True)
+            .annotate(course_count=Count('path_courses'))
+            [:4]
+        )
+
+        # ── Personalized (authenticated users) ──
+        continue_learning = []
+        recommended = []
+        recent_activity = []
+
+        if user.is_authenticated:
+            enrolled_ids = set(
+                Enrollment.objects.filter(user=user)
+                .values_list('course_id', flat=True)
+            )
+            enrolled_courses = [c for c in all_courses if c.id in enrolled_ids]
+
+            for course in enrolled_courses:
+                total = course.lesson_count or 0
+                done = LessonProgress.objects.filter(
+                    user=user, lesson__module__course_id=course.id, is_completed=True
+                ).count()
+                percent = int(done / total * 100) if total else 0
+                if 0 < percent < 100:
+                    continue_learning.append({
+                        'course': course,
+                        'percent': percent,
+                        'done': done,
+                        'total': total,
+                    })
+                if len(continue_learning) >= 3:
+                    break
+
+            # Recent activity
+            recent_raw = list(
+                LessonView.objects.filter(user=user)
+                .select_related('lesson__module__course')
+                .order_by('-first_seen_at')[:5]
+            )
+            recent_activity = [
+                {
+                    'lesson': rv.lesson,
+                    'course': rv.lesson.module.course,
+                    'viewed_on': rv.viewed_on,
+                }
+                for rv in recent_raw
+            ]
+
+            # Category-based recommendations
+            enrolled_cat_ids = set(
+                Course.objects.filter(id__in=enrolled_ids)
+                .values_list('category_id', flat=True)
+            )
+            if enrolled_cat_ids:
+                recommended = list(
+                    _course_card_annotations(
+                        published.filter(category_id__in=enrolled_cat_ids)
+                        .exclude(id__in=enrolled_ids)
+                        .select_related('category')
+                    ).order_by('-avg_rating', '-rating_count')[:6]
+                )
+
         return render(request, self.template_name, {
             'featured': featured,
             'trending': trending,
@@ -117,6 +188,10 @@ class HomeView(View):
             'latest_reviews': latest_reviews,
             'global_announcements': global_announcements,
             'category_strips': category_strips,
+            'learning_paths': learning_paths,
+            'continue_learning': continue_learning,
+            'recent_activity': recent_activity,
+            'recommended': recommended,
             'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
@@ -130,7 +205,7 @@ class CourseListView(View):
 
     def get(self, request):
         qs = _course_card_annotations(
-            Course.objects.select_related('category')
+            Course.objects.filter(status='published').select_related('category')
         )
 
         category_slug = request.GET.get('kategoriya', '').strip()
@@ -157,8 +232,18 @@ class CourseListView(View):
         if category_slug:
             active_category = next((c for c in categories if c.slug == category_slug), None)
 
+        # Pagination — 24 per page
+        paginator = Paginator(qs, 24)
+        page = request.GET.get('sahifa', 1)
+        try:
+            page_obj = paginator.page(page)
+        except (PageNotAnInteger, EmptyPage):
+            page_obj = paginator.page(1)
+
         return render(request, self.template_name, {
-            'courses': list(qs),
+            'courses': page_obj,
+            'page_obj': page_obj,
+            'is_paginated': page_obj.has_other_pages(),
             'categories': categories,
             'active_category': active_category,
             'active_level': level,
@@ -179,7 +264,7 @@ class CategoryDetailView(View):
     def get(self, request, slug):
         category = get_object_or_404(Category, slug=slug)
         courses = _course_card_annotations(
-            Course.objects.filter(category=category).select_related('category')
+            Course.objects.filter(category=category, status='published').select_related('category')
         ).order_by('order')
         categories = list(Category.objects.order_by('order', 'name'))
         return render(request, self.template_name, {
@@ -204,7 +289,8 @@ class SearchView(View):
         if q:
             courses = list(_course_card_annotations(
                 Course.objects.filter(
-                    Q(title__icontains=q) | Q(description__icontains=q) | Q(subtitle__icontains=q)
+                    Q(title__icontains=q) | Q(description__icontains=q) | Q(subtitle__icontains=q),
+                    status='published',
                 ).select_related('category')
             )[:20])
             lessons = list(
@@ -253,6 +339,8 @@ class CourseDetailView(View):
             Course.objects.select_related('category', 'instructor'),
             slug=course_slug,
         )
+        if course.status != 'published' and not (request.user.is_staff or request.user.is_superuser):
+            raise Http404
         modules = list(
             course.modules
             .prefetch_related('lessons')
@@ -483,6 +571,43 @@ class LessonDetailView(View):
             ).order_by('-is_pinned', '-created_at')[:3]
         )
 
+        # Article content
+        lesson_content_html = ''
+        if lesson.lesson_type == 'article' and lesson.content:
+            lesson_content_html = mark_safe(render_markdown(lesson.content))
+
+        # Bookmarks
+        bookmarks = []
+        if request.user.is_authenticated and lesson.lesson_type == 'video':
+            bookmarks = list(
+                VideoBookmark.objects.filter(user=request.user, lesson=lesson)
+                .order_by('timestamp_seconds')
+            )
+
+        # Quizzes
+        quizzes = list(lesson.quizzes.all())
+        quizzes_with_meta = []
+        if lesson.lesson_type == 'quiz' and request.user.is_authenticated:
+            for quiz in quizzes:
+                questions_count = quiz.questions.count()
+                past_attempts = list(
+                    quiz.attempts.filter(user=request.user).order_by('-started_at')[:10]
+                )
+                best_attempt = None
+                if past_attempts:
+                    best_attempt = max(past_attempts, key=lambda a: a.percentage())
+                attempts_remaining = -1
+                if quiz.max_attempts > 0:
+                    used = quiz.attempts.filter(user=request.user).count()
+                    attempts_remaining = max(quiz.max_attempts - used, 0)
+                quizzes_with_meta.append({
+                    'quiz': quiz,
+                    'questions_count': questions_count,
+                    'past_attempts': past_attempts,
+                    'best_attempt': best_attempt,
+                    'attempts_remaining': attempts_remaining,
+                })
+
         ctx = {
             'course': course,
             'module': module,
@@ -497,6 +622,7 @@ class LessonDetailView(View):
             'current_lesson': lesson,
             'completed_lesson_ids': done_ids,
             'lesson_description_html': mark_safe(render_markdown(lesson.description)),
+            'lesson_content_html': lesson_content_html,
             'note': note,
             'note_rendered': mark_safe(render_markdown(note.content)) if note and note.content else '',
             'resources': resources,
@@ -508,6 +634,9 @@ class LessonDetailView(View):
             'course_completed': completed_in_course,
             'course_total': total_in_course,
             'announcements': announcements,
+            'bookmarks': bookmarks,
+            'quizzes': quizzes,
+            'quizzes_with_meta': quizzes_with_meta,
         }
         return render(request, self.template_name, ctx)
 
@@ -900,3 +1029,354 @@ def post_answer(request, course_slug, module_slug, lesson_slug, question_id):
     return redirect(
         reverse('learning:lesson_detail', args=[course_slug, module_slug, lesson_slug]) + f'#q{question.id}'
     )
+
+
+# ---------------------------------------------------------------------------
+# Video Bookmarks
+# ---------------------------------------------------------------------------
+
+@login_required
+def save_bookmark(request, course_slug, module_slug, lesson_slug):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    try:
+        timestamp = int(data.get('timestamp', 0))
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid timestamp'}, status=400)
+    note_text = data.get('note', '').strip()
+    bookmark = VideoBookmark.objects.create(
+        user=request.user,
+        lesson=lesson,
+        timestamp_seconds=timestamp,
+        note=note_text,
+    )
+    return JsonResponse({
+        'status': 'ok',
+        'id': bookmark.id,
+        'timestamp': bookmark.formatted_timestamp(),
+    })
+
+
+@login_required
+def delete_bookmark(request, course_slug, module_slug, lesson_slug, bookmark_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    bookmark = get_object_or_404(VideoBookmark, id=bookmark_id, user=request.user, lesson=lesson)
+    bookmark.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+# ---------------------------------------------------------------------------
+# Quiz System
+# ---------------------------------------------------------------------------
+
+def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
+    questions_count = quiz.questions.count()
+    past_attempts = []
+    best_attempt = None
+    attempts_remaining = -1
+    if request.user.is_authenticated:
+        past_attempts = list(
+            QuizAttempt.objects.filter(user=request.user, quiz=quiz)
+            .order_by('-started_at')[:10]
+        )
+        if past_attempts:
+            best_attempt = max(past_attempts, key=lambda a: a.percentage())
+        if quiz.max_attempts > 0:
+            attempts_remaining = quiz.max_attempts - len(past_attempts)
+    return render(request, 'learning/quiz_detail.html', {
+        'course': lesson.module.course,
+        'module': lesson.module,
+        'lesson': lesson,
+        'quiz': quiz,
+        'questions_count': questions_count,
+        'past_attempts': past_attempts,
+        'best_attempt': best_attempt,
+        'attempts_remaining': attempts_remaining,
+    })
+
+
+@login_required
+def start_quiz(request, course_slug, module_slug, lesson_slug, quiz_id):
+    if request.method != 'POST':
+        return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
+    past_count = QuizAttempt.objects.filter(user=request.user, quiz=quiz).count()
+    if quiz.max_attempts > 0 and past_count >= quiz.max_attempts:
+        messages.error(request, "Ushbu test uchun maksimal urinishlar soniga yetdingiz.")
+        return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
+    attempt = QuizAttempt.objects.create(
+        user=request.user,
+        quiz=quiz,
+        max_score=quiz.questions.count(),
+    )
+    return redirect('learning:quiz_attempt', course_slug, module_slug, lesson_slug, quiz_id, attempt.id)
+
+
+@login_required
+def quiz_attempt_view(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
+    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
+    if attempt.completed_at:
+        return redirect('learning:quiz_result', course_slug, module_slug, lesson_slug, quiz_id, attempt_id)
+    questions = list(
+        quiz.questions.prefetch_related('choices').order_by('order')
+    )
+    return render(request, 'learning/quiz_take.html', {
+        'course': lesson.module.course,
+        'module': lesson.module,
+        'lesson': lesson,
+        'quiz': quiz,
+        'attempt': attempt,
+        'questions': questions,
+    })
+
+
+@login_required
+@transaction.atomic
+def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
+    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
+    if attempt.completed_at:
+        return JsonResponse({'error': 'Attempt already completed'}, status=400)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    answers = data.get('answers', {})
+    score = 0
+    max_score = quiz.questions.count()
+    attempt.answers.all().delete()
+    for q_data in quiz.questions.prefetch_related('choices').all():
+        q_id = str(q_data.id)
+        selected_id = answers.get(q_id)
+        selected_choice = None
+        is_correct = False
+        if selected_id:
+            try:
+                selected_choice = q_data.choices.get(id=int(selected_id))
+                is_correct = selected_choice.is_correct
+            except (QuizChoice.DoesNotExist, ValueError):
+                pass
+        QuizAnswer.objects.create(
+            attempt=attempt,
+            question=q_data,
+            selected_choice=selected_choice,
+            is_correct=is_correct,
+        )
+        if is_correct:
+            score += 1
+    attempt.score = score
+    attempt.max_score = max_score
+    attempt.completed_at = timezone.now()
+    attempt.passed = (attempt.percentage() >= quiz.pass_percent)
+    attempt.save(update_fields=['score', 'max_score', 'completed_at', 'passed'])
+
+    if attempt.passed:
+        LessonProgress.objects.update_or_create(
+            user=request.user,
+            lesson=lesson,
+            defaults={'is_completed': True},
+        )
+        _update_streak(request.user)
+        _maybe_issue_certificate(request.user, lesson.module.course)
+
+    return JsonResponse({
+        'status': 'ok',
+        'score': score,
+        'max_score': max_score,
+        'percentage': attempt.percentage(),
+        'passed': attempt.passed,
+        'redirect_url': reverse('learning:quiz_result', args=[course_slug, module_slug, lesson_slug, quiz_id, attempt_id]),
+    })
+
+
+@login_required
+def quiz_result(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
+    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
+    answers_detail = list(
+        attempt.answers.select_related('question', 'selected_choice')
+    )
+    return render(request, 'learning/quiz_result.html', {
+        'course': lesson.module.course,
+        'module': lesson.module,
+        'lesson': lesson,
+        'quiz': quiz,
+        'attempt': attempt,
+        'answers_detail': answers_detail,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Learning Paths
+# ---------------------------------------------------------------------------
+
+class LearningPathListView(View):
+    template_name = 'learning/learning_path_list.html'
+
+    def get(self, request):
+        paths = list(
+            LearningPath.objects.annotate(
+                course_count=Count('path_courses', distinct=True),
+                student_count=Count('enrollments', distinct=True),
+            ).order_by('order', 'title')
+        )
+        enrolled_ids = set()
+        if request.user.is_authenticated:
+            enrolled_ids = set(
+                LearningPathEnrollment.objects.filter(user=request.user)
+                .values_list('path_id', flat=True)
+            )
+        return render(request, self.template_name, {
+            'paths': paths,
+            'enrolled_ids': enrolled_ids,
+        })
+
+
+class LearningPathDetailView(View):
+    template_name = 'learning/learning_path_detail.html'
+
+    def get(self, request, path_slug):
+        path_obj = get_object_or_404(LearningPath, slug=path_slug)
+        courses_data = []
+        total_courses = 0
+        completed_courses = 0
+        is_enrolled = False
+        has_certificate = False
+
+        if request.user.is_authenticated:
+            is_enrolled = LearningPathEnrollment.objects.filter(
+                user=request.user, path=path_obj
+            ).exists()
+            has_certificate = LearningPathCertificate.objects.filter(
+                user=request.user, path=path_obj
+            ).exists()
+
+        for pc in path_obj.path_courses.select_related('course').order_by('order'):
+            course = pc.course
+            total_courses += 1
+            total_lessons = Lesson.objects.filter(module__course=course).count()
+            done_lessons = 0
+            is_course_complete = False
+            if request.user.is_authenticated:
+                done_lessons = LessonProgress.objects.filter(
+                    user=request.user, lesson__module__course=course, is_completed=True
+                ).count()
+                is_course_complete = total_lessons > 0 and done_lessons >= total_lessons
+            if is_course_complete:
+                completed_courses += 1
+            courses_data.append({
+                'course': course,
+                'order': pc.order,
+                'total_lessons': total_lessons,
+                'done_lessons': done_lessons,
+                'percent': int(done_lessons / total_lessons * 100) if total_lessons else 0,
+                'is_complete': is_course_complete,
+            })
+
+        path_complete = total_courses > 0 and completed_courses >= total_courses
+        if path_complete and request.user.is_authenticated and not has_certificate:
+            LearningPathCertificate.objects.get_or_create(user=request.user, path=path_obj)
+            has_certificate = True
+
+        return render(request, self.template_name, {
+            'path_obj': path_obj,
+            'courses_data': courses_data,
+            'is_enrolled': is_enrolled,
+            'has_certificate': has_certificate,
+            'total_courses': total_courses,
+            'completed_courses': completed_courses,
+            'path_complete': path_complete,
+            'overall_percent': int(completed_courses / total_courses * 100) if total_courses else 0,
+        })
+
+
+@login_required
+def enroll_learning_path(request, path_slug):
+    if request.method != 'POST':
+        return redirect('learning:learning_path_detail', path_slug=path_slug)
+    path_obj = get_object_or_404(LearningPath, slug=path_slug)
+    LearningPathEnrollment.objects.get_or_create(user=request.user, path=path_obj)
+    messages.success(request, "Yo'nalishga yozildingiz!")
+    return redirect('learning:learning_path_detail', path_slug=path_slug)
+
+
+@login_required
+def learning_path_certificate(request, path_slug):
+    path_obj = get_object_or_404(LearningPath, slug=path_slug)
+    cert = LearningPathCertificate.objects.filter(user=request.user, path=path_obj).first()
+    if not cert:
+        messages.warning(request, "Sertifikat olish uchun yo'nalishdagi barcha kurslarni tugating.")
+        return redirect('learning:learning_path_detail', path_slug=path_slug)
+    full_name = (request.user.first_name + ' ' + request.user.last_name).strip() or request.user.username
+    return render(request, 'learning/path_certificate.html', {
+        'path_obj': path_obj,
+        'certificate': cert,
+        'full_name': full_name,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Public Certificate Verification
+# ---------------------------------------------------------------------------
+
+def public_certificate_verify(request, code):
+    cert = get_object_or_404(Certificate, code=code)
+    full_name = (cert.user.first_name + ' ' + cert.user.last_name).strip() or cert.user.username
+    return render(request, 'learning/public_certificate.html', {
+        'course': cert.course,
+        'certificate': cert,
+        'full_name': full_name,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Instructor Profile
+# ---------------------------------------------------------------------------
+
+class InstructorDetailView(View):
+    template_name = 'learning/instructor_detail.html'
+
+    def get(self, request, username):
+        instructor = get_object_or_404(User, username=username)
+        courses = list(
+            _course_card_annotations(
+                Course.objects.filter(instructor=instructor, status='published')
+                .select_related('category')
+            ).order_by('-is_featured', 'order')
+        )
+        total_students = Enrollment.objects.filter(course__instructor=instructor).count()
+        total_ratings = sum(c.rating_count for c in courses)
+        avg_rating = (
+            sum(float(c.avg_rating) * c.rating_count for c in courses) / total_ratings
+            if total_ratings else 0
+        )
+        total_courses = len(courses)
+        total_lessons = sum(c.lesson_count for c in courses)
+        profile = getattr(instructor, 'telegram_profile', None)
+
+        return render(request, self.template_name, {
+            'instructor': instructor,
+            'profile': profile,
+            'courses': courses,
+            'total_students': total_students,
+            'total_courses': total_courses,
+            'total_lessons': total_lessons,
+            'avg_rating': round(avg_rating, 1),
+            'wishlist_ids': _user_wishlist_ids(request.user),
+        })

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load learning_extras %}
+
+{% block title %}{{ instructor.first_name }} {{ instructor.last_name }} – Ochiq Kurs{% endblock %}
+
+{% block content %}
+<div class="instructor-page">
+  <div class="instructor-hero">
+    <span class="avatar avatar-xl">
+      {% if profile and profile.photo_url %}
+        <img src="{{ profile.photo_url }}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">
+      {% else %}
+        <span style="font-size:2rem;font-weight:700">{{ instructor.first_name|default:instructor.username|slice:":1"|upper }}</span>
+      {% endif %}
+    </span>
+    <h1>{{ instructor.first_name }} {{ instructor.last_name }}</h1>
+    {% if instructor.instructor_bio %}<p class="instructor-bio">{{ instructor.instructor_bio }}</p>{% endif %}
+    <div class="instructor-stats">
+      <div class="instat"><strong>{{ total_courses }}</strong> <span>kurs</span></div>
+      <div class="instat"><strong>{{ total_students }}</strong> <span>o'quvchi</span></div>
+      <div class="instat"><strong>{{ total_lessons }}</strong> <span>dars</span></div>
+      {% if avg_rating %}<div class="instat"><strong>{{ avg_rating }}</strong> <span>reyting</span></div>{% endif %}
+    </div>
+  </div>
+
+  <h2>Kurslari</h2>
+  {% if courses %}
+  <div class="card-grid">
+    {% for course in courses %}
+      {% include "learning/_course_card.html" %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Hozircha kurslar mavjud emas.</p>
+  {% endif %}
+</div>
+{% endblock %}

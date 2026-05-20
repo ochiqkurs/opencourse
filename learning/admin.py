@@ -1,8 +1,12 @@
 from django.contrib import admin
+from django.utils import timezone
 from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
     Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
+    Quiz, QuizQuestion, QuizChoice, QuizAttempt, QuizAnswer,
+    LearningPath, LearningPathCourse, LearningPathEnrollment,
+    LearningPathCertificate, VideoBookmark,
 )
 
 
@@ -15,11 +19,24 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ['title', 'category', 'level', 'is_featured', 'avg_rating', 'rating_count', 'order']
-    list_filter = ['category', 'level', 'is_featured']
+    list_display = ['title', 'category', 'level', 'status', 'is_featured', 'avg_rating', 'rating_count', 'order']
+    list_filter = ['status', 'category', 'level', 'is_featured']
     search_fields = ['title', 'subtitle']
     prepopulated_fields = {'slug': ('title',)}
     ordering = ['order']
+    actions = ['make_published', 'make_draft', 'make_archived']
+
+    def make_published(self, request, queryset):
+        queryset.update(status='published', published_at=timezone.now())
+    make_published.short_description = "Tanlangan kurslarni nashr qilish"
+
+    def make_draft(self, request, queryset):
+        queryset.update(status='draft')
+    make_draft.short_description = "Tanlangan kurslarni qoralama holatiga o'tkazish"
+
+    def make_archived(self, request, queryset):
+        queryset.update(status='archived')
+    make_archived.short_description = "Tanlangan kurslarni arxivlash"
 
 
 @admin.register(Module)
@@ -33,8 +50,8 @@ class ModuleAdmin(admin.ModelAdmin):
 
 @admin.register(Lesson)
 class LessonAdmin(admin.ModelAdmin):
-    list_display = ['title', 'module', 'is_preview', 'order']
-    list_filter = ['module', 'is_preview']
+    list_display = ['title', 'module', 'lesson_type', 'is_preview', 'order']
+    list_filter = ['module', 'lesson_type', 'is_preview']
     search_fields = ['title']
     prepopulated_fields = {'slug': ('title',)}
     ordering = ['module', 'order']
@@ -116,3 +133,69 @@ class AnnouncementAdmin(admin.ModelAdmin):
     list_display = ['title', 'course', 'is_pinned', 'created_at']
     list_filter = ['is_pinned', 'course']
     search_fields = ['title', 'body']
+
+
+# ── Quiz Models ──
+
+@admin.register(Quiz)
+class QuizAdmin(admin.ModelAdmin):
+    list_display = ['title', 'lesson', 'pass_percent', 'max_attempts', 'created_at']
+    list_filter = ['lesson__module__course']
+    search_fields = ['title', 'lesson__title']
+
+
+@admin.register(QuizQuestion)
+class QuizQuestionAdmin(admin.ModelAdmin):
+    list_display = ['quiz', 'question_type', 'order', 'text_preview']
+    list_filter = ['question_type']
+
+    def text_preview(self, obj):
+        return obj.text[:80]
+    text_preview.short_description = 'Savol'
+
+
+@admin.register(QuizChoice)
+class QuizChoiceAdmin(admin.ModelAdmin):
+    list_display = ['question', 'text', 'is_correct', 'order']
+
+
+@admin.register(QuizAttempt)
+class QuizAttemptAdmin(admin.ModelAdmin):
+    list_display = ['user', 'quiz', 'score', 'passed', 'completed_at']
+    list_filter = ['passed']
+
+
+@admin.register(QuizAnswer)
+class QuizAnswerAdmin(admin.ModelAdmin):
+    list_display = ['attempt', 'question', 'is_correct']
+
+
+# ── Learning Path Models ──
+
+@admin.register(LearningPath)
+class LearningPathAdmin(admin.ModelAdmin):
+    list_display = ['title', 'order', 'is_featured', 'created_at']
+    prepopulated_fields = {'slug': ('title',)}
+
+
+@admin.register(LearningPathCourse)
+class LearningPathCourseAdmin(admin.ModelAdmin):
+    list_display = ['path', 'course', 'order']
+
+
+@admin.register(LearningPathEnrollment)
+class LearningPathEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ['user', 'path', 'enrolled_at']
+
+
+@admin.register(LearningPathCertificate)
+class LearningPathCertificateAdmin(admin.ModelAdmin):
+    list_display = ['code', 'user', 'path', 'issued_at']
+
+
+# ── Video Bookmark ──
+
+@admin.register(VideoBookmark)
+class VideoBookmarkAdmin(admin.ModelAdmin):
+    list_display = ['user', 'lesson', 'timestamp_seconds', 'created_at']
+    list_filter = ['lesson__module__course']

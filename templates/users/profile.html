@@ -171,7 +171,23 @@
     <form method="post">
       {% csrf_token %}
       <input type="hidden" name="update_profile" value="1">
-      {{ form.as_p }}
+      <div class="form-group">
+        <label for="id_username">Foydalanuvchi nomi</label>
+        <input type="text" name="username" id="id_username" value="{{ user.username }}" class="form-input" maxlength="150" required>
+        {% if form.username.errors %}<div class="form-error">{{ form.username.errors }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="id_first_name">Ism</label>
+        <input type="text" name="first_name" id="id_first_name" value="{{ user.first_name }}" class="form-input" maxlength="150">
+      </div>
+      <div class="form-group">
+        <label for="id_last_name">Familiya</label>
+        <input type="text" name="last_name" id="id_last_name" value="{{ user.last_name }}" class="form-input" maxlength="150">
+      </div>
+      <div class="form-group">
+        <label for="id_email">Email</label>
+        <input type="email" name="email" id="id_email" value="{{ user.email }}" class="form-input">
+      </div>
       <button type="submit" class="btn btn-primary">Saqlash</button>
     </form>
   </div>

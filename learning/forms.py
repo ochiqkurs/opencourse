@@ -55,9 +55,11 @@ class ModuleForm(forms.ModelForm):
 class LessonForm(forms.ModelForm):
     class Meta:
         model = Lesson
-        fields = ['title', 'slug', 'description', 'module', 'youtube_video_id', 'is_preview', 'order']
+        fields = ['title', 'slug', 'description', 'module', 'lesson_type', 'content',
+                  'youtube_video_id', 'is_preview', 'order']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
+            'content': forms.Textarea(attrs={'rows': 15, 'placeholder': 'Markdown formatida yozing...'}),
         }
 
     def __init__(self, *args, **kwargs):

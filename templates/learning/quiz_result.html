@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Natija – {{ quiz.title }}{% endblock %}
+
+{% block content %}
+
+<nav class="breadcrumb">
+  <a href="{% url 'learning:course_detail' course.slug %}">{{ course.title }}</a>
+  <span class="sep">›</span>
+  <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">{{ lesson.title }}</a>
+  <span class="sep">›</span>
+  <a href="{% url 'learning:quiz_detail' course.slug module.slug lesson.slug quiz.id %}">{{ quiz.title }}</a>
+  <span class="sep">›</span>
+  <span>Natija</span>
+</nav>
+
+<div class="quiz-result-page">
+  <div class="qr-hero {% if attempt.passed %}qr-passed{% else %}qr-failed{% endif %}">
+    <div class="qr-badge">
+      {% if attempt.passed %}
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      {% else %}
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      {% endif %}
+    </div>
+    <h1>{% if attempt.passed %}Tabriklaymiz! Testdan o'tdingiz.{% else %}Afsuski, testdan o'ta olmadingiz.{% endif %}</h1>
+    <div class="qr-score">
+      <span class="qr-score-num">{{ attempt.score|floatformat:0 }} / {{ attempt.max_score }}</span>
+      <span class="qr-score-pct">{{ attempt.percentage }}%</span>
+    </div>
+    <p class="qr-pass-info">O'tish bali: {{ quiz.pass_percent }}%</p>
+  </div>
+
+  <div class="qr-questions">
+    <h2>Savollar tahlili</h2>
+    {% for ans in answers_detail %}
+    <div class="qr-q-item {% if ans.is_correct %}qr-correct{% else %}qr-wrong{% endif %}">
+      <div class="qr-q-head">
+        <span class="qr-q-icon">
+          {% if ans.is_correct %}✓{% else %}✗{% endif %}
+        </span>
+        <span class="qr-q-text">{{ ans.question.text }}</span>
+      </div>
+      {% if ans.question.explanation %}
+      <div class="qr-q-explanation">{{ ans.question.explanation }}</div>
+      {% endif %}
+      <div class="qr-q-choices">
+        {% for c in ans.question.choices.all %}
+        <div class="qr-q-choice
+          {% if c.is_correct %}qr-choice-correct{% endif %}
+          {% if c.id == ans.selected_choice_id and not ans.is_correct %}qr-choice-selected-wrong{% endif %}
+          {% if c.id == ans.selected_choice_id and ans.is_correct %}qr-choice-selected{% endif %}">
+          {{ c.text }}
+          {% if c.is_correct %}<span class="qr-correct-mark">✓</span>{% endif %}
+          {% if c.id == ans.selected_choice_id and not ans.is_correct %}<span class="qr-wrong-mark">Sizning javobingiz</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="qr-actions">
+    <a href="{% url 'learning:quiz_detail' course.slug module.slug lesson.slug quiz.id %}" class="btn btn-primary">Test sahifasiga qaytish</a>
+    <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}" class="btn btn-secondary">Darsga qaytish</a>
+  </div>
+</div>
+{% endblock %}

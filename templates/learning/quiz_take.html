@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Test – {{ quiz.title }}{% endblock %}
+
+{% block content %}
+
+<nav class="breadcrumb">
+  <a href="{% url 'learning:course_detail' course.slug %}">{{ course.title }}</a>
+  <span class="sep">›</span>
+  <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}">{{ lesson.title }}</a>
+  <span class="sep">›</span>
+  <span>{{ quiz.title }}</span>
+</nav>
+
+<div class="quiz-take-page">
+  <div class="quiz-take-header">
+    <h1>{{ quiz.title }}</h1>
+    <p>{{ questions|length }} ta savol</p>
+  </div>
+
+  <form id="quiz-form">
+    {% csrf_token %}
+    {% for q in questions %}
+    <div class="quiz-question-block" data-qid="{{ q.id }}">
+      <div class="qq-num">{{ forloop.counter }}</div>
+      <div class="qq-body">
+        <div class="qq-text">{{ q.text }}</div>
+        <div class="qq-choices">
+          {% for c in q.choices.all %}
+          <label class="qq-choice">
+            <input type="radio" name="q_{{ q.id }}" value="{{ c.id }}">
+            <span class="qq-radio"></span>
+            <span class="qq-label">{{ c.text }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="quiz-submit-area">
+      <button type="submit" class="btn btn-primary btn-lg" id="quiz-submit-btn">Javoblarni yuborish</button>
+      <span id="quiz-submit-status" class="note-status"></span>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var cfg = JSON.parse(document.getElementById('lesson-config') || '{}');
+  var SUBMIT_URL = '{% url "learning:submit_quiz_answer" course.slug module.slug lesson.slug quiz.id attempt.id %}';
+  var CSRF = '{{ csrf_token }}';
+
+  document.getElementById('quiz-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    var unanswered = document.querySelectorAll('.quiz-question-block').length;
+    var answered = 0;
+    var answers = {};
+
+    document.querySelectorAll('.quiz-question-block').forEach(function (block) {
+      var qid = block.dataset.qid;
+      var checked = block.querySelector('input[type="radio"]:checked');
+      if (checked && checked.value) {
+        answers[qid] = checked.value;
+        answered++;
+      }
+    });
+
+    if (answered < unanswered) {
+      if (!confirm((unanswered - answered) + ' ta savolga javob berilmagan. Baribir yuborishni xohlaysizmi?')) {
+        return;
+      }
+    }
+
+    var btn = document.getElementById('quiz-submit-btn');
+    var status = document.getElementById('quiz-submit-status');
+    btn.disabled = true;
+    btn.textContent = 'Yuborilmoqda...';
+    status.textContent = '';
+
+    fetch(SUBMIT_URL, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: answers }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.status === 'ok') {
+          window.location.href = data.redirect_url;
+        } else {
+          status.textContent = 'Xatolik yuz berdi. Qayta urinib ko\'ring.';
+          btn.disabled = false;
+          btn.textContent = 'Javoblarni yuborish';
+        }
+      })
+      .catch(function () {
+        status.textContent = 'Xatolik yuz berdi. Qayta urinib ko\'ring.';
+        btn.disabled = false;
+        btn.textContent = 'Javoblarni yuborish';
+      });
+  });
+
+  // Visual selection feedback: highlight selected choice
+  document.querySelectorAll('.qq-choice input[type="radio"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      var block = radio.closest('.quiz-question-block');
+      block.querySelectorAll('.qq-choice').forEach(function (c) {
+        c.classList.remove('qq-selected');
+      });
+      radio.closest('.qq-choice').classList.add('qq-selected');
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Yo'nalishlar – Ochiq Kurs{% endblock %}
+
+{% block content %}
+<div class="path-list-page">
+  <div class="path-head">
+    <h1>Yo'nalishlar</h1>
+    <p>Bir necha kursdan iborat to'plamlar bilan bilimlaringizni chuqurlashtiring. Har bir yo'nalishni oxirigacha tugatib, maxsus sertifikat oling.</p>
+  </div>
+
+  {% if paths %}
+  <div class="path-grid">
+    {% for p in paths %}
+    <div class="path-card">
+      <div class="path-card-body">
+        <h3>{{ p.title }}</h3>
+        <p>{{ p.description|truncatechars:150 }}</p>
+        <div class="path-card-meta">
+          <span>{{ p.course_count }} ta kurs</span>
+          <span class="dot"></span>
+          <span>{{ p.student_count }} ta o'quvchi</span>
+        </div>
+      </div>
+      <div class="path-card-action">
+        {% if p.id in enrolled_ids %}
+          <a href="{% url 'learning:learning_path_detail' p.slug %}" class="btn btn-primary btn-sm">Davom etish</a>
+        {% else %}
+          <a href="{% url 'learning:learning_path_detail' p.slug %}" class="btn btn-secondary btn-sm">Batafsil</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h3>Hozircha yo'nalishlar mavjud emas</h3>
+    <p>Tez orada yangi yo'nalishlar qo'shiladi.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -38,6 +38,11 @@ class Course(models.Model):
         ('advanced', "Yuqori"),
         ('all', 'Hamma uchun'),
     ]
+    STATUS_CHOICES = [
+        ('draft', 'Qoralama'),
+        ('published', 'Nashr qilingan'),
+        ('archived', 'Arxivlangan'),
+    ]
 
     title = models.CharField(max_length=255)
     slug = models.SlugField(unique=True, max_length=120)
@@ -74,12 +79,15 @@ class Course(models.Model):
     is_featured = models.BooleanField(default=False)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     rating_count = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='published', db_index=True)
+    published_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['order']
         indexes = [
             models.Index(fields=['slug']),
             models.Index(fields=['category', 'order']),
+            models.Index(fields=['status', '-published_at']),
         ]
 
     def __str__(self):
@@ -146,6 +154,12 @@ class Module(models.Model):
 
 
 class Lesson(models.Model):
+    LESSON_TYPE_CHOICES = [
+        ('video', 'Video'),
+        ('article', 'Maqola'),
+        ('quiz', 'Test'),
+    ]
+
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=120)
     description = models.TextField(blank=True)
@@ -154,7 +168,9 @@ class Lesson(models.Model):
         related_name='lessons',
         on_delete=models.CASCADE,
     )
-    youtube_video_id = models.CharField(max_length=20)
+    lesson_type = models.CharField(max_length=10, choices=LESSON_TYPE_CHOICES, default='video')
+    content = models.TextField(blank=True, help_text="Maqola darsi uchun matn (Markdown)")
+    youtube_video_id = models.CharField(max_length=20, blank=True)
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     order = models.PositiveIntegerField(default=0)
     is_preview = models.BooleanField(default=False)
@@ -363,3 +379,177 @@ class Announcement(models.Model):
     def __str__(self):
         scope = self.course.title if self.course else 'Global'
         return f"[{scope}] {self.title}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# Quiz Models
+# ═══════════════════════════════════════════════════════════════
+
+class Quiz(models.Model):
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='quizzes')
+    title = models.CharField(max_length=200, default="Dars yakuni testi")
+    description = models.TextField(blank=True)
+    pass_percent = models.PositiveIntegerField(default=70, help_text="Foizda (0-100)")
+    max_attempts = models.PositiveIntegerField(default=0, help_text="0 = cheksiz urinish")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Quizzes'
+
+    def __str__(self):
+        return f"{self.lesson.title} – Test"
+
+
+class QuizQuestion(models.Model):
+    QUESTION_TYPE_CHOICES = [
+        ('multiple_choice', "Ko'p tanlovli"),
+        ('true_false', "To'g'ri/Noto'g'ri"),
+    ]
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='questions')
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPE_CHOICES, default='multiple_choice')
+    text = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+    explanation = models.TextField(blank=True, help_text="Javobdan keyin ko'rsatiladi")
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return self.text[:60]
+
+
+class QuizChoice(models.Model):
+    question = models.ForeignKey(QuizQuestion, on_delete=models.CASCADE, related_name='choices')
+    text = models.CharField(max_length=300)
+    is_correct = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{'✓' if self.is_correct else '○'} {self.text[:50]}"
+
+
+class QuizAttempt(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='quiz_attempts')
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='attempts')
+    score = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    max_score = models.PositiveIntegerField(default=0)
+    passed = models.BooleanField(default=False)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [models.Index(fields=['user', 'quiz'])]
+
+    def __str__(self):
+        return f"{self.user.username} – {self.quiz.title} ({self.score}/{self.max_score})"
+
+    def percentage(self):
+        if self.max_score == 0:
+            return 0
+        return int((self.score / self.max_score) * 100)
+
+
+class QuizAnswer(models.Model):
+    attempt = models.ForeignKey(QuizAttempt, on_delete=models.CASCADE, related_name='answers')
+    question = models.ForeignKey(QuizQuestion, on_delete=models.CASCADE)
+    selected_choice = models.ForeignKey(QuizChoice, on_delete=models.CASCADE, null=True, blank=True)
+    is_correct = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = [('attempt', 'question')]
+
+    def __str__(self):
+        return f"Q{self.question_id}: {'✓' if self.is_correct else '✗'}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# Learning Path Models
+# ═══════════════════════════════════════════════════════════════
+
+class LearningPath(models.Model):
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True, max_length=120)
+    description = models.TextField(blank=True)
+    thumbnail = models.ImageField(upload_to='path_thumbnails/', blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+    is_featured = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'title']
+        verbose_name_plural = 'Learning paths'
+
+    def __str__(self):
+        return self.title
+
+
+class LearningPathCourse(models.Model):
+    path = models.ForeignKey(LearningPath, on_delete=models.CASCADE, related_name='path_courses')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='learning_paths')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+        unique_together = [('path', 'course')]
+        verbose_name_plural = 'Path courses'
+
+    def __str__(self):
+        return f"{self.path.title} → {self.course.title}"
+
+
+class LearningPathEnrollment(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='path_enrollments')
+    path = models.ForeignKey(LearningPath, on_delete=models.CASCADE, related_name='enrollments')
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'path')]
+
+    def __str__(self):
+        return f"{self.user.username} → {self.path.title}"
+
+
+class LearningPathCertificate(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='path_certificates')
+    path = models.ForeignKey(LearningPath, on_delete=models.CASCADE, related_name='certificates')
+    code = models.CharField(max_length=32, unique=True, default=_generate_cert_code)
+    issued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'path')]
+        ordering = ['-issued_at']
+
+    def __str__(self):
+        return f"PathCert {self.code} – {self.user.username} / {self.path.title}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# Video Bookmark
+# ═══════════════════════════════════════════════════════════════
+
+class VideoBookmark(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='video_bookmarks')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='bookmarks')
+    timestamp_seconds = models.PositiveIntegerField()
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp_seconds']
+        indexes = [models.Index(fields=['user', 'lesson'])]
+
+    def __str__(self):
+        return f"{self.user.username} @ {self.timestamp_seconds}s on {self.lesson.title}"
+
+    def formatted_timestamp(self):
+        h = self.timestamp_seconds // 3600
+        m = (self.timestamp_seconds % 3600) // 60
+        s = self.timestamp_seconds % 60
+        if h:
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"

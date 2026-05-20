@@ -42,6 +42,7 @@
 
       <nav class="navbar-nav">
         <a href="{% url 'learning:course_list' %}" class="navbar-link nav-only-desktop">Kurslar</a>
+        <a href="{% url 'learning:learning_path_list' %}" class="navbar-link nav-only-desktop">Yo'nalishlar</a>
         <a href="{% url 'learning:leaderboard' %}" class="navbar-link nav-only-desktop">Reyting</a>
         {% if user.is_authenticated %}
           <a href="{% url 'learning:my_learning' %}" class="navbar-link nav-only-desktop">Mening kurslarim</a>
@@ -172,6 +173,8 @@
                 <a href="{% url 'learning:lesson_detail' sidebar_course.slug sub.slug lesson.slug %}">
                   {% if completed_lesson_ids and lesson.id in completed_lesson_ids %}
                     <svg class="ll-check" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {% elif lesson.lesson_type == 'quiz' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   {% else %}
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   {% endif %}

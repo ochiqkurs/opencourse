@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, per-lesson Q&A, attachable resources, announcements, a public leaderboard, and a Udemy-style catalog UI.
+**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, article/text lessons, per-lesson quizzes (multiple-choice + true/false), learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, video timestamp bookmarks, per-lesson Q&A, attachable resources, announcements, a public leaderboard, public certificate verification, instructor profile pages, and a Udemy-style catalog UI with pagination.
 
 ---
 
@@ -38,8 +38,14 @@ opencourse/                          # Repository root (also Django project root
 │   ├── forms.py
 │   └── migrations/
 ├── learning/                        # Course content app
-│   ├── models.py                    # Course, Module, Lesson, LessonProgress, VideoSession, VideoEvent, Note
-│   ├── views.py                     # Course/lesson views, video session tracking
+│   ├── models.py                    # Course, Module, Lesson, LessonProgress, LessonView, Note,
+│   │                                #   Enrollment, CourseReview, Certificate, Wishlist,
+│   │                                #   LessonResource, LessonQuestion, LessonAnswer, Announcement,
+│   │                                #   Quiz, QuizQuestion, QuizChoice, QuizAttempt, QuizAnswer,
+│   │                                #   LearningPath, LearningPathCourse, LearningPathEnrollment,
+│   │                                #   LearningPathCertificate, VideoBookmark
+│   ├── views.py                     # Course/lesson views, quiz, bookmarks, learning paths,
+│   │                                #   instructor profiles, certificate verification
 │   ├── urls.py
 │   ├── forms.py
 │   ├── utils.py                     # Markdown rendering helper
@@ -54,13 +60,17 @@ opencourse/                          # Repository root (also Django project root
 │   ├── home.html                    # Pro hero + curated rows (featured/trending/per-category/newest)
 │   ├── registration/login.html      # Telegram auth page
 │   ├── learning/                    # course_list, course_detail, module_detail, lesson_detail,
-│   │                                #   wishlist, my_learning, leaderboard, _course_card
+│   │                                #   wishlist, my_learning, leaderboard, _course_card,
+│   │                                #   quiz_detail, quiz_take, quiz_result,
+│   │                                #   learning_path_list, learning_path_detail, path_certificate,
+│   │                                #   public_certificate, instructor_detail
 │   └── users/                       # profile, admin_panel, signup
 ├── static/
 │   ├── css/style.css
 │   └── js/
-│       ├── lesson_tracker.js        # YouTube IFrame API: record one view per play, mark complete
+│       ├── lesson_tracker.js        # YouTube IFrame API: record one view per play, mark complete, article auto-record
 │       ├── lesson_notes.js          # Markdown notes, save/preview
+│       ├── lesson_bookmarks.js      # Video timestamp bookmarks: add, delete, seek YT player
 │       ├── ui.js                    # Theme toggle, user dropdown, mobile drawer
 │       └── search.js                # Debounced navbar search suggestions
 ├── playlist-fetcher/
@@ -84,16 +94,21 @@ opencourse/                          # Repository root (also Django project root
 Course      (title, slug, subtitle, description, thumbnail, category FK,
              level, language, instructor FK, instructor_name, instructor_bio,
              what_you_learn, requirements, is_featured, avg_rating,
-             rating_count, order)
+             rating_count, status, published_at, order)
   └─ Module (title, slug, description, course FK, order)
-       └─ Lesson (title, slug, description, module FK, youtube_video_id,
-                  duration_seconds, is_preview, order)
+       └─ Lesson (title, slug, description, module FK, lesson_type, content,
+                  youtube_video_id, duration_seconds, is_preview, order)
 ```
 
 - **Course.thumbnail** — optional `ImageField` (uploaded to `course_thumbnails/`). Falls back to YouTube thumbnail of the first lesson via `get_thumbnail_url()`.
 - **Course.what_you_learn** / **Course.requirements** — newline-separated text blobs, surfaced as Python lists via `.what_you_learn_list` and `.requirements_list` for templates.
 - **Course.avg_rating** / **Course.rating_count** — denormalised aggregates; recomputed by `course.update_rating()` after each review save.
+- **Course.status** — `draft` / `published` / `archived` (default `published`). Only published courses appear in catalog views. Non-staff users get 404 on draft courses.
+- **Course.published_at** — auto-set when a course is first published via admin bulk action.
 - **Course.instructor_display()** — returns `instructor_name`, else the linked User's full name, else `"Ochiq kurs jamoasi"`.
+- **Lesson.lesson_type** — `video` / `article` (default `video`). Article lessons render Markdown content instead of a YouTube embed.
+- **Lesson.content** — Markdown body for article lessons.
+- **Lesson.youtube_video_id** — optional (blank for article lessons).
 
 ### Discovery & Catalog Models
 
@@ -114,6 +129,25 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 - **LessonQuestion / LessonAnswer** — per-lesson Q&A. Questions belong to a `Lesson` + `User`; answers belong to a `Question` + `User`. `LessonAnswer.is_instructor` is auto-set to `True` when the answering user has `is_staff` or `is_superuser`. Rendered in the "Savol-javob" tab.
 - **Announcement** — `title`, `body`, optional `course` FK (null = global, shown on home + every course/lesson page), `is_pinned`. Ordered by `(-is_pinned, -created_at)`.
 
+### Quiz Models
+
+- **Quiz** — FK to `Lesson`, `title`, `description`, `pass_percent` (default 70), `max_attempts` (0 = unlimited). A lesson can have multiple quizzes.
+- **QuizQuestion** — FK to `Quiz`, `question_type` (`multiple_choice` / `true_false`), `text`, `order`, `explanation` (shown after answering). Questions are ordered by `order`.
+- **QuizChoice** — FK to `QuizQuestion`, `text`, `is_correct`, `order`. Rendered as radio options in the quiz UI.
+- **QuizAttempt** — FK to `User` + `Quiz`, `score`, `max_score`, `passed` (bool), `started_at`, `completed_at`. Tracks each user's quiz submission. `percentage()` method returns 0-100.
+- **QuizAnswer** — FK to `QuizAttempt` + `QuizQuestion` + `QuizChoice`, `is_correct`. One per question per attempt. `unique_together(attempt, question)`.
+
+### Learning Path Models
+
+- **LearningPath** — `title`, `slug` (unique), `description`, `thumbnail`, `order`, `is_featured`, `created_at`. Curated multi-course track like Udacity Nanodegree.
+- **LearningPathCourse** — FK to `LearningPath` + `Course`, `order`. Through model: `unique_together(path, course)`.
+- **LearningPathEnrollment** — FK to `User` + `LearningPath`. Per-user enrollment marker: `unique_together(user, path)`.
+- **LearningPathCertificate** — FK to `User` + `LearningPath`, `code` (unique, auto-generated), `issued_at`. Auto-issued when all courses in the path are complete.
+
+### Video Bookmark
+
+- **VideoBookmark** — FK to `User` + `Lesson`, `timestamp_seconds`, `note` (optional text), `created_at`. Ordered by `timestamp_seconds`. Indexed on `(user, lesson)`. `formatted_timestamp()` returns `M:SS` or `H:MM:SS`.
+
 ### User Models
 
 - **UserProfile** — OneToOne with Django User: `current_streak`, `longest_streak`, `last_activity_date`
@@ -133,18 +167,31 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/mening-kurslarim/` | learning | "My Learning" — enrolled courses with progress; tabs `?holat=all/in_progress/not_started/completed` |
 | `/malaka/reyting/` | learning | Public leaderboard with podium + table; `?davr=all/month/week` |
 | `/malaka/kategoriya/<slug>/` | learning | Courses inside a category |
+| `/malaka/yonalishlar/` | learning | Learning path catalog (curated multi-course tracks) |
+| `/malaka/yonalish/<slug>/` | learning | Learning path detail (sequential courses with progress) |
+| `/malaka/yonalish/<slug>/yozilish/` | learning | POST: enroll in a learning path |
+| `/malaka/yonalish/<slug>/sertifikat/` | learning | Learning path certificate |
+| `/malaka/sertifikat/tekshirish/<code>/` | learning | Public certificate verification (no login required) |
+| `/malaka/oqituvchi/<username>/` | learning | Public instructor profile (bio, stats, courses) |
 | `/malaka/<course>/` | learning | Course detail (tabbed: Umumiy / Dastur / Sharhlar / O'qituvchi) |
 | `/malaka/<course>/yozilish/` | learning | POST: enroll in course |
 | `/malaka/<course>/sevimli/` | learning | POST: toggle wishlist (JSON; idempotent) |
 | `/malaka/<course>/sharh/` | learning | POST: create or update review |
 | `/malaka/<course>/sertifikat/` | learning | Printable certificate page (auto-issues if all lessons complete) |
 | `/malaka/<course>/<module>/` | learning | Module detail |
-| `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page |
+| `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page (tabs: Tavsif/Eslatma/Resurslar/Xatcho'plar/Savol-javob/Test/E'lonlar) |
 | `/malaka/<course>/<module>/<lesson>/complete/` | learning | POST: mark complete (manual) |
 | `/malaka/<course>/<module>/<lesson>/note/` | learning | POST: save note (JSON) |
 | `/malaka/<course>/<module>/<lesson>/davom/korildi/` | learning | POST: record a daily LessonView (fired from JS on YT `PLAYING`) |
 | `/malaka/<course>/<module>/<lesson>/savol/` | learning | POST: ask a question on the lesson |
 | `/malaka/<course>/<module>/<lesson>/savol/<id>/javob/` | learning | POST: answer a question |
+| `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/` | learning | Quiz overview (description, pass %, past attempts) |
+| `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/boshlash/` | learning | POST: start quiz attempt |
+| `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/` | learning | Take quiz (question display) |
+| `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/javob/` | learning | POST: submit quiz answers (JSON) |
+| `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/natija/` | learning | Quiz result with per-question review |
+| `/malaka/<course>/<module>/<lesson>/xatchop/` | learning | POST: save video bookmark (JSON: timestamp, note) |
+| `/malaka/<course>/<module>/<lesson>/xatchop/<id>/ochirish/` | learning | POST: delete video bookmark |
 | `/users/login/` | users | Telegram login (token generated) |
 | `/users/signup/` | users | Same flow as login |
 | `/users/profile/` | users | Dashboard (streak, stats, continue learning, certificates) |
@@ -156,7 +203,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 
 URL namespaces: `learning:` and `users:`
 
-URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sevimli` / `sevimlilar` (favorite/wishlist), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `korildi` ("watched"), `savol` (question), `javob` (answer), `reyting` (rating/leaderboard), `mening-kurslarim` (my courses). All explicit prefixed paths (`qidiruv/`, `sevimlilar/`, `mening-kurslarim/`, `reyting/`, `kategoriya/<slug>/`) **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
+URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sevimli` / `sevimlilar` (favorite/wishlist), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `korildi` ("watched"), `savol` (question), `javob` (answer), `reyting` (rating/leaderboard), `mening-kurslarim` (my courses), `yonalish` / `yonalishlar` (learning path/s), `oqituvchi` (instructor), `xatchop` (bookmark), `tekshirish` (verification). All explicit prefixed paths (`qidiruv/`, `sevimlilar/`, `mening-kurslarim/`, `reyting/`, `kategoriya/<slug>/`, `yonalishlar/`, `yonalish/<slug>/`, `sertifikat/tekshirish/<code>/`, `oqituvchi/<username>/`) **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
 
 ---
 
@@ -231,6 +278,63 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ### My Learning
 - `/malaka/mening-kurslarim/` shows every course the user is enrolled in (one card per `Enrollment`) with a progress percentage derived from `LessonProgress`. Tabs: all / in progress / not started / completed. Completed courses show a "Sertifikat" CTA instead of "Davom etish".
 
+### Course Publishing Workflow
+- Courses have a `status` field: `draft`, `published`, `archived` (default `published` for existing).
+- All public catalog views (`CourseListView`, `SearchView`, `CategoryDetailView`, `HomeView`) filter to `status='published'`.
+- `CourseDetailView` returns 404 for non-published courses unless the user is staff/superuser.
+- Admin: `list_filter` by status, three bulk actions (`make_published`, `make_draft`, `make_archived`).
+
+### Quizzes
+- Per-lesson quizzes with multiple-choice or true/false questions.
+- Quiz detail page shows description, pass percentage, number of questions, and past attempts with scores.
+- POST `/boshlash/` creates a `QuizAttempt`. Max attempts enforced server-side.
+- Quiz taking: all questions displayed at once, radio-button selection, confirm-before-submit dialog for unanswered questions.
+- Submission via JSON POST to `/javob/`. Server auto-scores each answer, updates attempt with score/percentage/passed status.
+- Result page: score display, pass/fail badge (green/red), per-question review with correct answer highlight and explanation.
+- Quiz tab on lesson page lists available quizzes with start buttons.
+
+### Video Bookmarks (Xatcho'plar)
+- Per-user per-lesson timestamp bookmarks for video lessons only.
+- Capture current YouTube time via `player.getCurrentTime()`. Optional note text.
+- Bookmark list shows formatted timestamps (`M:SS` or `H:MM:SS`), optional notes, and delete buttons.
+- Clicking a bookmark timestamp seeks the YT player to that position via `player.seekTo()`.
+- `lesson_bookmarks.js` integrates with the YT player reference exposed by `lesson_tracker.js` via `window.__bmSetPlayer()`.
+
+### Learning Paths (Yo'nalishlar)
+- Curated multi-course tracks displayed on a dedicated catalog page (`/malaka/yonalishlar/`).
+- Path detail page shows sequential courses with per-course progress bars (for enrolled users).
+- Enrollment: `POST /yozilish/` creates `LearningPathEnrollment`.
+- Path certificate auto-issued when all courses in the path are 100% complete.
+- Featured paths shown on the homepage.
+- Nav link "Yo'nalishlar" in the main navbar.
+
+### Public Certificate Verification
+- `/malaka/sertifikat/tekshirish/<code>/` — public page, no login required.
+- Displays certificate with a green "Haqiqiy sertifikat" verification badge.
+- Copy link button for sharing.
+- Certificate detail page links to this verification URL.
+
+### Instructor Profiles
+- Public page at `/malaka/oqituvchi/<username>/` showing instructor's Telegram avatar (or initial), bio, stats (courses, students, lessons, avg rating), and a grid of their published courses.
+- Instructor name on course detail page (hero strip + instructor tab) links to the profile.
+- Only works for courses that have `course.instructor` (FK to User) set.
+
+### Home Page Personalization
+- Authenticated users see "Davom ettirish" section (up to 3 in-progress courses with progress bars), recent activity line, and "Sizga yoqishi mumkin" — category-based recommendations (6 courses in same categories as enrolled, not yet enrolled).
+- Anonymous users see the standard hero + trust strip.
+- Featured learning paths section shown for all users when paths exist.
+
+### Article Lessons
+- Lessons with `lesson_type='article'` render Markdown content (`lesson.content`) instead of a YouTube embed.
+- Article wrapper styled like a reading pane (max-width 820px, padded).
+- `lesson_tracker.js` auto-records a view on page load for article lessons (no video play needed).
+- Lesson type badge displayed in the subtitle meta area.
+
+### Pagination
+- Course catalog uses Django `Paginator`, 24 courses per page.
+- Page navigation preserves all active filter query params (category, level, sort, search query).
+- Parameter name: `?sahifa=<N>`.
+
 ### Admin Bulk Create
 - Accepts nested JSON: `course → modules → lessons` with YouTube video IDs
 - Auto-generates slugs from titles
@@ -256,7 +360,7 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ### Lesson Detail Page
 - Above the video: a "course-progress-strip" with the course title, `N / total` completed lessons, and a progress bar.
 - Lesson title row carries a wishlist toggle and a "Tugatildi" badge when applicable.
-- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Savol-javob` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill.
+- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `Test` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill.
 - `Savol-javob` includes an ask form for authenticated users and a list of questions, each with an expandable answers `<details>` block and a quick-reply form. The tab auto-opens when the URL hash starts with `#qa` or `#q`.
 
 ### Dashboard (`/users/profile/`)
@@ -268,8 +372,9 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 - Profile-edit form + admin shortcut (staff only).
 
 ### Home Page
-- Pro hero with a Telegram-style hero card stack on the right, a pill-search field, and a trust strip of stats.
-- Then: trust strip, category grid, **Featured** row, "Why us" feature row, **Trending** row, one row per category (top 6 categories × 6 courses each), **Newest** row, testimonials, and a final CTA banner.
+- **Authenticated users**: "Davom ettirish" section (up to 3 in-progress courses with progress bars), recent activity, "Sizga yoqishi mumkin" recommendations, featured learning paths section.
+- **Anonymous users**: Pro hero with a Telegram-style hero card stack on the right, a pill-search field, and a trust strip of stats.
+- Then: featured learning paths (if any), trust strip, category grid, **Featured** row, "Why us" feature row, **Trending** row, one row per category (top 6 categories × 6 courses each), **Newest** row, testimonials, and a final CTA banner.
 - Global announcements render as amber banners at the top of the page when present.
 
 ---
@@ -306,7 +411,7 @@ For local dev, copy `.env.example` to `.env` (not committed).
 ## Frontend Conventions
 
 - **No JS framework** — vanilla JS in IIFE pattern
-- Config for JS modules is injected via embedded `<script>` JSON in `lesson_detail.html`. The current `lesson-config` keys are `lesson_id`, `video_id`, `csrf_token`, `is_authenticated`, `url_record`, `url_complete` (the old `url_start`/`url_event`/`url_beacon` are gone).
+- Config for JS modules is injected via embedded `<script>` JSON in `lesson_detail.html`. The current `lesson-config` keys are `lesson_id`, `video_id`, `csrf_token`, `is_authenticated`, `is_article`, `url_record`, `url_complete`, `url_save_bookmark`.
 - All AJAX uses the Fetch API with CSRF tokens. There is **no** Beacon API and **no** `visibilitychange`/`pagehidden` listener anymore — view recording is a single fire-and-forget POST on the YouTube `PLAYING` state.
 - Highlight.js used for code block syntax highlighting in lesson descriptions/notes
 - Design system: emerald brand + amber accent, Inter (UI) + Plus Jakarta Sans (headings) loaded from Google Fonts in `base.html`. Tokens in `:root` in `static/css/style.css`. Dark mode is opt-in via `html[data-theme="dark"]`, toggled by `ui.js` and persisted in `localStorage`.
@@ -427,3 +532,16 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 | Resource | Auxiliary material (link/file/code/doc) attached to a lesson |
 | Announcement | Site- or course-scoped banner with optional pin |
 | Leaderboard | Public ranking of users by `LessonView` count |
+| Quiz | Per-lesson assessment with multiple-choice or true/false questions |
+| QuizAttempt | One user's submission of a quiz, with score and pass/fail status |
+| Learning Path (Yo'nalish) | Curated sequential multi-course track; completing all courses awards a path certificate |
+| Video Bookmark (Xatcho'p) | Per-user timestamp marker on a video lesson with optional note |
+| Article Lesson (Maqola) | Text-based lesson with rendered Markdown content; no video |
+| Course Status | `draft` / `published` / `archived` — controls catalog visibility |
+| Public Certificate Verification | Anyone can verify a certificate code at `/malaka/sertifikat/tekshirish/<code>/` |
+| Instructor Profile | Public page at `/malaka/oqituvchi/<username>/` with instructor bio and courses |
+| yonalish / yonalishlar | Uzbek: "direction" / "directions" — URL segments for learning paths |
+| xatcho'p | Uzbek: "bookmark" — URL segment for video bookmarks |
+| oqituvchi | Uzbek: "teacher" — URL segment for instructor profiles |
+| tekshirish | Uzbek: "verification" — URL segment for certificate verification |
+| sahifa | Uzbek: "page" — URL query param for pagination |

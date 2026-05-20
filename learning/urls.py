@@ -31,6 +31,36 @@ urlpatterns = [
         name='leaderboard',
     ),
     path(
+        'yonalishlar/',
+        views.LearningPathListView.as_view(),
+        name='learning_path_list',
+    ),
+    path(
+        'yonalish/<slug:path_slug>/',
+        views.LearningPathDetailView.as_view(),
+        name='learning_path_detail',
+    ),
+    path(
+        'yonalish/<slug:path_slug>/yozilish/',
+        views.enroll_learning_path,
+        name='enroll_learning_path',
+    ),
+    path(
+        'yonalish/<slug:path_slug>/sertifikat/',
+        views.learning_path_certificate,
+        name='learning_path_certificate',
+    ),
+    path(
+        'sertifikat/tekshirish/<slug:code>/',
+        views.public_certificate_verify,
+        name='public_certificate_verify',
+    ),
+    path(
+        'oqituvchi/<slug:username>/',
+        views.InstructorDetailView.as_view(),
+        name='instructor_detail',
+    ),
+    path(
         'kategoriya/<slug:slug>/',
         views.CategoryDetailView.as_view(),
         name='category_detail',
@@ -54,6 +84,11 @@ urlpatterns = [
         '<slug:course_slug>/sertifikat/',
         views.certificate_view,
         name='certificate',
+    ),
+    path(
+        '<slug:course_slug>/sevimli/',
+        views.toggle_wishlist,
+        name='toggle_wishlist',
     ),
     path(
         '<slug:course_slug>/<slug:module_slug>/',
@@ -81,11 +116,6 @@ urlpatterns = [
         name='record_view',
     ),
     path(
-        '<slug:course_slug>/sevimli/',
-        views.toggle_wishlist,
-        name='toggle_wishlist',
-    ),
-    path(
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/',
         views.ask_question,
         name='ask_question',
@@ -94,5 +124,42 @@ urlpatterns = [
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/<int:question_id>/javob/',
         views.post_answer,
         name='post_answer',
+    ),
+    # Video bookmarks
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/xatchop/',
+        views.save_bookmark,
+        name='save_bookmark',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/xatchop/<int:bookmark_id>/ochirish/',
+        views.delete_bookmark,
+        name='delete_bookmark',
+    ),
+    # Quiz system
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/',
+        views.quiz_detail,
+        name='quiz_detail',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/boshlash/',
+        views.start_quiz,
+        name='start_quiz',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/urinish/<int:attempt_id>/',
+        views.quiz_attempt_view,
+        name='quiz_attempt',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/urinish/<int:attempt_id>/javob/',
+        views.submit_quiz_answer,
+        name='submit_quiz_answer',
+    ),
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/urinish/<int:attempt_id>/natija/',
+        views.quiz_result,
+        name='quiz_result',
     ),
 ]
