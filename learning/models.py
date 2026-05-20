@@ -157,6 +157,7 @@ class Lesson(models.Model):
     LESSON_TYPE_CHOICES = [
         ('video', 'Video'),
         ('article', 'Maqola'),
+        ('quiz', 'Test'),
     ]
 
     title = models.CharField(max_length=255)

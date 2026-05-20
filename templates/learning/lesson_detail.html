@@ -31,6 +31,86 @@
   <div class="video-wrapper">
     <div id="yt-player"></div>
   </div>
+{% elif lesson.lesson_type == 'quiz' %}
+  <div class="quiz-lesson-content">
+    {% if quizzes_with_meta %}
+      {% for qm in quizzes_with_meta %}
+      <div class="quiz-hero">
+        <div class="quiz-hero-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h1>{{ qm.quiz.title }}</h1>
+        {% if qm.quiz.description %}<p class="quiz-hero-desc">{{ qm.quiz.description }}</p>{% endif %}
+        <div class="quiz-hero-meta">
+          <span>{{ qm.questions_count }} ta savol</span>
+          <span class="dot"></span>
+          <span>O'tish bali: {{ qm.quiz.pass_percent }}%</span>
+          {% if qm.quiz.max_attempts > 0 %}
+          <span class="dot"></span>
+          <span>Max {{ qm.quiz.max_attempts }} ta urinish</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if user.is_authenticated %}
+        {% if qm.attempts_remaining == 0 %}
+          <div class="quiz-limit-warn">
+            <p>Ushbu test uchun barcha urinishlardan foydalanib bo'ldingiz.</p>
+          </div>
+        {% else %}
+          <form method="post" action="{% url 'learning:start_quiz' course.slug module.slug lesson.slug qm.quiz.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-lg quiz-start-btn">Testni boshlash</button>
+          </form>
+        {% endif %}
+
+        {% if qm.past_attempts %}
+        <div class="quiz-history">
+          <h3>Avvalgi urinishlar</h3>
+          <table class="quiz-history-table">
+            <thead>
+              <tr>
+                <th>Sana</th>
+                <th>Natija</th>
+                <th>Holat</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in qm.past_attempts %}
+              <tr>
+                <td>{{ a.completed_at|date:"d M Y, H:i" }}</td>
+                <td>{{ a.score|floatformat:0 }} / {{ a.max_score }} ({{ a.percentage }}%)</td>
+                <td>
+                  {% if a.passed %}
+                    <span class="badge badge-green">O'tdi</span>
+                  {% else %}
+                    <span class="badge badge-red">O'tmadi</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{% url 'learning:quiz_result' course.slug module.slug lesson.slug qm.quiz.id a.id %}" class="btn btn-ghost btn-sm">Ko'rish</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Test topshirish uchun <a href="{% url 'users:login' %}">saytga kiring</a>.</p>
+      {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="quiz-hero">
+        <div class="quiz-hero-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h1>Test</h1>
+        <p class="quiz-hero-desc">Bu dars uchun hali test qo'shilmagan.</p>
+      </div>
+    {% endif %}
+  </div>
 {% else %}
   <div class="article-wrapper">
     <div class="md-content article-content">{{ lesson_content_html }}</div>
@@ -42,7 +122,7 @@
       <h1>{{ lesson.title }}</h1>
       <div class="lesson-sub-meta">
         <span>{{ module.title }}</span>
-        <span class="dot"></span><span class="badge badge-soft">{% if lesson.lesson_type == 'article' %}Maqola{% else %}Video{% endif %}</span>
+        <span class="dot"></span><span class="badge badge-soft">{% if lesson.lesson_type == 'article' %}Maqola{% elif lesson.lesson_type == 'quiz' %}Test{% else %}Video{% endif %}</span>
         {% if lesson.duration_seconds %}<span class="dot"></span><span>{{ lesson.duration_seconds|lesson_time }}</span>{% endif %}
         {% if lesson.is_preview %}<span class="dot"></span><span class="badge badge-amber">Tanishtiruv</span>{% endif %}
       </div>
@@ -65,6 +145,7 @@
     </div>
   </div>
 
+  {% if lesson.lesson_type != 'quiz' %}
   <div class="ld-tabs" role="tablist">
     <button type="button" class="active" data-ld="desc">Tavsif</button>
     <button type="button" data-ld="notes">Eslatma</button>
@@ -308,6 +389,7 @@
     </div>
   </div>
   {% endif %}
+  {% endif %}
 
   <div class="lesson-nav">
     {% if prev_lesson %}
@@ -362,6 +444,7 @@
   if (window.hljs) hljs.highlightAll();
 }());
 
+{% if lesson.lesson_type != 'quiz' %}
 (function() {
   function activate(name) {
     document.querySelectorAll('.ld-tabs button').forEach(function(x){ x.classList.toggle('active', x.dataset.ld === name); });
@@ -380,5 +463,6 @@
 {% endif %}
 {% if lesson.lesson_type == 'video' %}
 <script src="{% static 'js/lesson_bookmarks.js' %}"></script>
+{% endif %}
 {% endif %}
 {% endblock %}

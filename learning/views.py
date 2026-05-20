@@ -586,6 +586,27 @@ class LessonDetailView(View):
 
         # Quizzes
         quizzes = list(lesson.quizzes.all())
+        quizzes_with_meta = []
+        if lesson.lesson_type == 'quiz' and request.user.is_authenticated:
+            for quiz in quizzes:
+                questions_count = quiz.questions.count()
+                past_attempts = list(
+                    quiz.attempts.filter(user=request.user).order_by('-started_at')[:10]
+                )
+                best_attempt = None
+                if past_attempts:
+                    best_attempt = max(past_attempts, key=lambda a: a.percentage())
+                attempts_remaining = -1
+                if quiz.max_attempts > 0:
+                    used = quiz.attempts.filter(user=request.user).count()
+                    attempts_remaining = max(quiz.max_attempts - used, 0)
+                quizzes_with_meta.append({
+                    'quiz': quiz,
+                    'questions_count': questions_count,
+                    'past_attempts': past_attempts,
+                    'best_attempt': best_attempt,
+                    'attempts_remaining': attempts_remaining,
+                })
 
         ctx = {
             'course': course,
@@ -615,6 +636,7 @@ class LessonDetailView(View):
             'announcements': announcements,
             'bookmarks': bookmarks,
             'quizzes': quizzes,
+            'quizzes_with_meta': quizzes_with_meta,
         }
         return render(request, self.template_name, ctx)
 
@@ -1162,6 +1184,16 @@ def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, 
     attempt.completed_at = timezone.now()
     attempt.passed = (attempt.percentage() >= quiz.pass_percent)
     attempt.save(update_fields=['score', 'max_score', 'completed_at', 'passed'])
+
+    if attempt.passed:
+        LessonProgress.objects.update_or_create(
+            user=request.user,
+            lesson=lesson,
+            defaults={'is_completed': True},
+        )
+        _update_streak(request.user)
+        _maybe_issue_certificate(request.user, lesson.module.course)
+
     return JsonResponse({
         'status': 'ok',
         'score': score,
