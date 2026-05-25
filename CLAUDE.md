@@ -106,7 +106,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 - **Course.status** — `draft` / `published` / `archived` (default `published`). Only published courses appear in catalog views. Non-staff users get 404 on draft courses.
 - **Course.published_at** — auto-set when a course is first published via admin bulk action.
 - **Course.instructor_display()** — returns `instructor_name`, else the linked User's full name, else `"Ochiq kurs jamoasi"`.
-- **Lesson.lesson_type** — `video` / `article` (default `video`). Article lessons render Markdown content instead of a YouTube embed.
+- **Lesson.lesson_type** — `video` / `article` / `quiz` (default `video`). Article lessons render Markdown content instead of a YouTube embed. Quiz lessons render their attached quiz as the lesson's main content (no video, no tab bar).
 - **Lesson.content** — Markdown body for article lessons.
 - **Lesson.youtube_video_id** — optional (blank for article lessons).
 
@@ -131,7 +131,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 
 ### Quiz Models
 
-- **Quiz** — FK to `Lesson`, `title`, `description`, `pass_percent` (default 70), `max_attempts` (0 = unlimited). A lesson can have multiple quizzes.
+- **Quiz** — FK to `Lesson`, `title`, `description`, `pass_percent` (default 70), `max_attempts` (0 = unlimited). The FK still allows multiple quizzes per lesson, but only `lesson_type='quiz'` lessons surface a quiz in the UI; quizzes attached to video/article lessons are not rendered (inline quizzes were removed — the FK is kept for a possible future inline-quiz feature).
 - **QuizQuestion** — FK to `Quiz`, `question_type` (`multiple_choice` / `true_false`), `text`, `order`, `explanation` (shown after answering). Questions are ordered by `order`.
 - **QuizChoice** — FK to `QuizQuestion`, `text`, `is_correct`, `order`. Rendered as radio options in the quiz UI.
 - **QuizAttempt** — FK to `User` + `Quiz`, `score`, `max_score`, `passed` (bool), `started_at`, `completed_at`. Tracks each user's quiz submission. `percentage()` method returns 0-100.
@@ -179,7 +179,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/<course>/sharh/` | learning | POST: create or update review |
 | `/malaka/<course>/sertifikat/` | learning | Printable certificate page (auto-issues if all lessons complete) |
 | `/malaka/<course>/<module>/` | learning | Module detail |
-| `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page (tabs: Tavsif/Eslatma/Resurslar/Xatcho'plar/Savol-javob/Test/E'lonlar) |
+| `/malaka/<course>/<module>/<lesson>/` | learning | Lesson page (tabs: Tavsif/Eslatma/Resurslar/Xatcho'plar/Savol-javob/E'lonlar; quiz-type lessons render the quiz as main content, no tabs) |
 | `/malaka/<course>/<module>/<lesson>/complete/` | learning | POST: mark complete (manual) |
 | `/malaka/<course>/<module>/<lesson>/note/` | learning | POST: save note (JSON) |
 | `/malaka/<course>/<module>/<lesson>/davom/korildi/` | learning | POST: record a daily LessonView (fired from JS on YT `PLAYING`) |
@@ -285,13 +285,13 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 - Admin: `list_filter` by status, three bulk actions (`make_published`, `make_draft`, `make_archived`).
 
 ### Quizzes
+- Quizzes are surfaced only on `lesson_type='quiz'` lessons — the quiz renders as the lesson's main content (a "hero" with start button + past-attempt history). Video/article lessons no longer have a "Test" tab (inline quizzes were removed; the `Quiz.lesson` FK is kept for a possible future inline-quiz feature). The view only builds `quizzes_with_meta` (and queries `lesson.quizzes`) when `lesson_type='quiz'`.
 - Per-lesson quizzes with multiple-choice or true/false questions.
 - Quiz detail page shows description, pass percentage, number of questions, and past attempts with scores.
 - POST `/boshlash/` creates a `QuizAttempt`. Max attempts enforced server-side.
 - Quiz taking: all questions displayed at once, radio-button selection, confirm-before-submit dialog for unanswered questions.
-- Submission via JSON POST to `/javob/`. Server auto-scores each answer, updates attempt with score/percentage/passed status.
+- Submission via JSON POST to `/javob/`. Server auto-scores each answer, updates attempt with score/percentage/passed status. Passing the quiz marks the lesson `is_completed=True`, updates the streak, and may issue the course certificate.
 - Result page: score display, pass/fail badge (green/red), per-question review with correct answer highlight and explanation.
-- Quiz tab on lesson page lists available quizzes with start buttons.
 
 ### Video Bookmarks (Xatcho'plar)
 - Per-user per-lesson timestamp bookmarks for video lessons only.
@@ -360,7 +360,7 @@ New users get `set_unusable_password()` — Telegram-only auth by default.
 ### Lesson Detail Page
 - Above the video: a "course-progress-strip" with the course title, `N / total` completed lessons, and a progress bar.
 - Lesson title row carries a wishlist toggle and a "Tugatildi" badge when applicable.
-- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `Test` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill.
+- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill. Quiz-type lessons skip the tab bar entirely and render the quiz as the main content.
 - `Savol-javob` includes an ask form for authenticated users and a list of questions, each with an expandable answers `<details>` block and a quick-reply form. The tab auto-opens when the URL hash starts with `#qa` or `#q`.
 
 ### Dashboard (`/users/profile/`)

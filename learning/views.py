@@ -584,11 +584,10 @@ class LessonDetailView(View):
                 .order_by('timestamp_seconds')
             )
 
-        # Quizzes
-        quizzes = list(lesson.quizzes.all())
+        # Quizzes — only standalone quiz-type lessons surface a quiz now
         quizzes_with_meta = []
         if lesson.lesson_type == 'quiz' and request.user.is_authenticated:
-            for quiz in quizzes:
+            for quiz in lesson.quizzes.all():
                 questions_count = quiz.questions.count()
                 past_attempts = list(
                     quiz.attempts.filter(user=request.user).order_by('-started_at')[:10]
@@ -635,7 +634,6 @@ class LessonDetailView(View):
             'course_total': total_in_course,
             'announcements': announcements,
             'bookmarks': bookmarks,
-            'quizzes': quizzes,
             'quizzes_with_meta': quizzes_with_meta,
         }
         return render(request, self.template_name, ctx)

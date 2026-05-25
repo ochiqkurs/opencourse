@@ -152,7 +152,6 @@
     <button type="button" data-ld="resources">Resurslar {% if resources %}<span class="tab-count">{{ resources|length }}</span>{% endif %}</button>
     {% if lesson.lesson_type == 'video' %}<button type="button" data-ld="bookmarks">Xatcho'plar {% if bookmarks %}<span class="tab-count">{{ bookmarks|length }}</span>{% endif %}</button>{% endif %}
     <button type="button" data-ld="qa">Savol-javob {% if questions %}<span class="tab-count">{{ questions|length }}</span>{% endif %}</button>
-    <button type="button" data-ld="quiz">Test {% if quizzes %}<span class="tab-count">{{ quizzes|length }}</span>{% endif %}</button>
     {% if announcements %}<button type="button" data-ld="ann">E'lonlar <span class="tab-count">{{ announcements|length }}</span></button>{% endif %}
   </div>
 
@@ -343,35 +342,6 @@
       <div class="empty-state" style="margin-top:16px">
         <h3>Hozircha savollar yo'q</h3>
         <p>Bu dars yuzasidan birinchi savolni siz bering.</p>
-      </div>
-    {% endif %}
-  </div>
-
-    <div class="ld-panel" data-ld-panel="quiz">
-    {% if quizzes %}
-      <div class="quiz-list">
-        {% for quiz in quizzes %}
-        <div class="quiz-card">
-          <div class="quiz-card-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <div class="quiz-card-body">
-            <h3>{{ quiz.title }}</h3>
-            {% if quiz.description %}<p>{{ quiz.description }}</p>{% endif %}
-            <div class="quiz-card-meta">
-              <span>{{ quiz.questions.count }} ta savol</span>
-              <span class="dot"></span>
-              <span>O'tish bali: {{ quiz.pass_percent }}%</span>
-            </div>
-          </div>
-          <a href="{% url 'learning:quiz_detail' course.slug module.slug lesson.slug quiz.id %}" class="btn btn-primary btn-sm">Testni ochish</a>
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <div class="empty-state">
-        <h3>Hozircha test mavjud emas</h3>
-        <p>Bu dars uchun test hali qo'shilmagan.</p>
       </div>
     {% endif %}
   </div>
