@@ -413,8 +413,10 @@
   });
   if (window.hljs) hljs.highlightAll();
 }());
+</script>
 
 {% if lesson.lesson_type != 'quiz' %}
+<script>
 (function() {
   function activate(name) {
     document.querySelectorAll('.ld-tabs button').forEach(function(x){ x.classList.toggle('active', x.dataset.ld === name); });

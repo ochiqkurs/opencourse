@@ -833,6 +833,18 @@ def _get_lesson(course_slug, module_slug, lesson_slug):
     return get_object_or_404(Lesson, slug=lesson_slug, module=module)
 
 
+def _next_lesson(course, module, lesson):
+    """First lesson after `lesson` within its module, else first lesson of the next module."""
+    siblings = list(module.lessons.order_by('order'))
+    idx = next((i for i, l in enumerate(siblings) if l.id == lesson.id), None)
+    if idx is not None and idx < len(siblings) - 1:
+        return siblings[idx + 1]
+    next_module = course.modules.filter(order__gt=module.order).order_by('order').first()
+    if next_module:
+        return next_module.lessons.order_by('order').first()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Wishlist
 # ---------------------------------------------------------------------------
@@ -1210,13 +1222,15 @@ def quiz_result(request, course_slug, module_slug, lesson_slug, quiz_id, attempt
     answers_detail = list(
         attempt.answers.select_related('question', 'selected_choice')
     )
+    course = lesson.module.course
     return render(request, 'learning/quiz_result.html', {
-        'course': lesson.module.course,
+        'course': course,
         'module': lesson.module,
         'lesson': lesson,
         'quiz': quiz,
         'attempt': attempt,
         'answers_detail': answers_detail,
+        'next_lesson': _next_lesson(course, lesson.module, lesson),
     })
 
 

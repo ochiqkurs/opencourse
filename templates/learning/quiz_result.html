@@ -61,8 +61,14 @@
   </div>
 
   <div class="qr-actions">
-    <a href="{% url 'learning:quiz_detail' course.slug module.slug lesson.slug quiz.id %}" class="btn btn-primary">Test sahifasiga qaytish</a>
-    <a href="{% url 'learning:lesson_detail' course.slug module.slug lesson.slug %}" class="btn btn-secondary">Darsga qaytish</a>
+    {% if next_lesson %}
+      <a href="{% url 'learning:lesson_detail' course.slug next_lesson.module.slug next_lesson.slug %}" class="btn btn-primary">Keyingi dars →</a>
+    {% else %}
+      <a href="{% url 'learning:course_detail' course.slug %}" class="btn btn-primary">Kursga qaytish</a>
+    {% endif %}
+    {% if not attempt.passed %}
+      <a href="{% url 'learning:quiz_detail' course.slug module.slug lesson.slug quiz.id %}" class="btn btn-secondary">Qayta urinish</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
