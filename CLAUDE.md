@@ -192,13 +192,16 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/natija/` | learning | Quiz result with per-question review |
 | `/malaka/<course>/<module>/<lesson>/xatchop/` | learning | POST: save video bookmark (JSON: timestamp, note) |
 | `/malaka/<course>/<module>/<lesson>/xatchop/<id>/ochirish/` | learning | POST: delete video bookmark |
-| `/users/login/` | users | Telegram login (token generated) |
-| `/users/signup/` | users | Same flow as login |
+| `/users/login/` | users | Telegram login (token + 6-digit code generated) |
+| `/users/signup/` | users | Same flow as login (renders `login.html`; `signup.html` is unused) |
+| `/users/kirish/parol/` | users | Username + password login (rate-limited 10/min per IP) |
+| `/users/parol-ornatish/` | users | Set/change username + password (login required) |
 | `/users/profile/` | users | Dashboard (streak, stats, continue learning, certificates) |
 | `/users/admin/` | users | Admin panel (staff only) |
 | `/users/admin/bulk-create/` | users | Bulk create course tree |
 | `/users/admin/fetch-playlist/` | users | YouTube playlist fetch |
 | `/api/auth/confirm/` | users | Telegram bot callback |
+| `/api/auth/resolve-code/` | users | Bot exchanges a 6-digit login code for the full token (`X-Bot-Secret`) |
 | `/api/auth/check/<token>/` | users | Browser polling (rate-limited) |
 
 URL namespaces: `learning:` and `users:`
@@ -217,6 +220,12 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 6. Browser receives confirmed status, redirects to `/malaka/`
 
 New users get `set_unusable_password()` — Telegram-only auth by default.
+
+### Code-based login (other device)
+Each `TelegramAuthToken` also carries a 6-digit `short_code` (unique among currently valid tokens). The login page shows it as `392 047`; the user sends `/login 392047` to the bot. The bot POSTs `{short_code}` to `/api/auth/resolve-code/` (gated by `X-Bot-Secret`), gets back the full `token`, then calls the existing `/api/auth/confirm/` unchanged. The browser's normal polling then logs the user in. `resolve-code` returns 404 (unknown code), 410 (expired/confirmed), or `{token}` (200).
+
+### Username + password login
+A Telegram-authenticated user can set a username + password at `/users/parol-ornatish/` (`SetUsernamePasswordForm`; username regex `^[a-z0-9_]{3,30}$`, `validate_password`, `update_session_auth_hash` keeps the session). They can then log in without Telegram at `/users/kirish/parol/` (`UsernamePasswordLoginForm`). A password-less account that tries password login gets a specific "set a password first" message rather than a generic error. Password-reset flow is not implemented yet.
 
 ---
 
