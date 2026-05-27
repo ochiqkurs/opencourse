@@ -1989,6 +1989,42 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Alternative login methods (6-digit code + password) */
+.login-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 26px 0 20px;
+  color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
+}
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.login-altcode-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+.login-altcode-help { font-size: .85rem; color: var(--muted); margin-bottom: 14px; }
+.login-altcode-help a { color: var(--brand-600); font-weight: 600; }
+.login-code {
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 1.7rem; font-weight: 700; letter-spacing: .12em;
+  padding: 12px 22px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+.login-code:hover { border-color: var(--brand-500); }
+.login-code.copied { border-color: var(--brand-500); color: var(--brand-600); }
+.login-code-feedback {
+  display: block;
+  margin-top: 8px; height: 1em;
+  font-size: .8rem; color: var(--brand-600);
+  opacity: 0; transition: opacity var(--t-fast);
+}
+.login-code-feedback.visible { opacity: 1; }
+.login-altpwd { margin-top: 22px; font-size: .85rem; color: var(--muted); }
+.login-altpwd a { color: var(--brand-600); font-weight: 600; }
+.login-form { text-align: left; margin-top: 8px; }
+.ps-text { color: var(--text-soft); font-size: .92rem; margin-bottom: 14px; }
+
 /* ── Certificate ─────────────────────────────────────────── */
 .certificate-page { background: var(--gray-100); padding: 40px 16px; min-height: calc(100vh - var(--nav-h)); }
 .cert-paper {

@@ -192,6 +192,21 @@
     </form>
   </div>
 
+  <!-- Password login -->
+  <div class="profile-section">
+    <h2>
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Parol bilan kirish
+    </h2>
+    {% if user.has_usable_password %}
+      <p class="ps-text">Siz parol o'rnatib bo'lgansiz. Username: <strong>{{ user.username }}</strong></p>
+      <a href="{% url 'users:set_password' %}" class="btn btn-secondary">Parolni o'zgartirish</a>
+    {% else %}
+      <p class="ps-text">Parol o'rnatsangiz, Telegramsiz qurilmadan ham kirishingiz mumkin.</p>
+      <a href="{% url 'users:set_password' %}" class="btn btn-primary">Parol o'rnatish</a>
+    {% endif %}
+  </div>
+
   {% if is_admin %}
   <div class="profile-section">
     <h2>

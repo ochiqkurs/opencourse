@@ -26,6 +26,23 @@
     <p>Telegram botiga o'ting va <strong>Start</strong> tugmasini bosing…</p>
     <p id="tg-error" class="form-errors" style="display:none"></p>
   </div>
+
+  <div class="login-divider"><span>yoki</span></div>
+
+  <div class="login-altcode">
+    <h2 class="login-altcode-title">Boshqa qurilmadan kirayapsizmi?</h2>
+    <p class="login-altcode-help">
+      Telegramda <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener noreferrer">@{{ bot_username }}</a>
+      botiga quyidagini yuboring:
+    </p>
+    <code class="login-code" data-copy data-code="{{ short_code }}" title="Nusxa olish uchun bosing">/login {{ short_code|slice:":3" }} {{ short_code|slice:"3:" }}</code>
+    <span id="code-feedback" class="login-code-feedback">Nusxa olindi ✓</span>
+  </div>
+
+  <p class="login-altpwd">
+    Allaqachon parol o'rnatganmisiz?
+    <a href="{% url 'users:login_password' %}">Username va parol bilan kirish</a>
+  </p>
 </div>
 
 <script>
@@ -68,6 +85,25 @@
     function showError(msg) {
       errorEl.textContent = msg;
       errorEl.style.display = 'block';
+    }
+
+    var codeEl = document.querySelector('.login-code[data-copy]');
+    var feedbackEl = document.getElementById('code-feedback');
+    var feedbackTimer = null;
+    if (codeEl) {
+      codeEl.addEventListener('click', function () {
+        var raw = codeEl.getAttribute('data-code') || codeEl.textContent.replace(/\D/g, '');
+        if (!navigator.clipboard) { return; }
+        navigator.clipboard.writeText(raw).then(function () {
+          codeEl.classList.add('copied');
+          if (feedbackEl) { feedbackEl.classList.add('visible'); }
+          clearTimeout(feedbackTimer);
+          feedbackTimer = setTimeout(function () {
+            codeEl.classList.remove('copied');
+            if (feedbackEl) { feedbackEl.classList.remove('visible'); }
+          }, 1600);
+        }).catch(function () {});
+      });
     }
   })();
 </script>
