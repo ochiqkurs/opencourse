@@ -18,6 +18,7 @@ class UserProfile(models.Model):
 
 class TelegramAuthToken(models.Model):
     token = models.CharField(max_length=64, unique=True)
+    short_code = models.CharField(max_length=6, db_index=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
@@ -33,9 +34,25 @@ class TelegramAuthToken(models.Model):
         return self.token
 
     @classmethod
+    def _generate_short_code(cls):
+        """6-digit numeric code, unique among currently valid (unexpired, unconfirmed) tokens."""
+        cutoff = timezone.now() - timedelta(minutes=10)
+        code = ''.join(secrets.choice('0123456789') for _ in range(6))
+        for _ in range(10):
+            clash = cls.objects.filter(
+                short_code=code,
+                confirmed_at__isnull=True,
+                created_at__gt=cutoff,
+            ).exists()
+            if not clash:
+                break
+            code = ''.join(secrets.choice('0123456789') for _ in range(6))
+        return code
+
+    @classmethod
     def generate(cls):
         token = secrets.token_hex(32)  # 64 hex chars
-        return cls.objects.create(token=token)
+        return cls.objects.create(token=token, short_code=cls._generate_short_code())
 
 
 class TelegramProfile(models.Model):
