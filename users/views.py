@@ -23,13 +23,22 @@ from learning.models import (
     Enrollment, Certificate, Category,
 )
 from learning.forms import CourseForm, ModuleForm, LessonForm, CategoryForm
-from .forms import UserProfileForm
+from .forms import (
+    UserProfileForm, SetUsernamePasswordForm, UsernamePasswordLoginForm,
+)
 from .models import TelegramAuthToken, TelegramProfile
 
 
-def _check_rate_limit(ip, max_requests=60, window=60):
+def _client_ip(request):
+    return (
+        request.META.get('HTTP_X_FORWARDED_FOR', '') or
+        request.META.get('REMOTE_ADDR', '')
+    ).split(',')[0].strip()
+
+
+def _check_rate_limit(ip, max_requests=60, window=60, prefix='check'):
     """Fixed-window rate limiter using Django cache. Returns True if limit exceeded."""
-    key = f'rl:check:{ip}'
+    key = f'rl:{prefix}:{ip}'
     cache.add(key, 0, window)
     count = cache.incr(key)
     return count > max_requests
@@ -47,6 +56,8 @@ class TelegramLoginView(View):
         return render(request, 'registration/login.html', {
             'bot_url': bot_url,
             'token': auth_token.token,
+            'short_code': auth_token.short_code,
+            'bot_username': bot_username,
         })
 
 
@@ -125,14 +136,43 @@ class TelegramConfirmView(View):
         return JsonResponse({'status': 'ok'})
 
 
+@method_decorator(csrf_exempt, name='dispatch')
+class ResolveCodeView(View):
+    """Called by the Telegram bot to exchange a 6-digit login code for the full token.
+    Gated by the same X-Bot-Secret check as TelegramConfirmView."""
+
+    def post(self, request):
+        secret = request.headers.get('X-Bot-Secret', '')
+        if secret != settings.BOT_SECRET:
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        code = re.sub(r'\D', '', data.get('short_code', ''))
+        if len(code) != 6:
+            return JsonResponse({'error': 'not_found'}, status=404)
+
+        # A code may be reused by a new token after the old one expires, so pick the latest.
+        auth_token = (
+            TelegramAuthToken.objects.filter(short_code=code).order_by('-created_at').first()
+        )
+        if auth_token is None:
+            return JsonResponse({'error': 'not_found'}, status=404)
+
+        if not auth_token.is_valid():
+            return JsonResponse({'error': 'expired'}, status=410)
+
+        return JsonResponse({'token': auth_token.token})
+
+
 class CheckTokenView(View):
     """Polled by the browser every 2 seconds to check Telegram confirmation status."""
 
     def get(self, request, token):
-        ip = (
-            request.META.get('HTTP_X_FORWARDED_FOR', '') or
-            request.META.get('REMOTE_ADDR', '')
-        ).split(',')[0].strip()
+        ip = _client_ip(request)
         if _check_rate_limit(ip):
             return JsonResponse({'status': 'rate_limited'}, status=429)
 
@@ -294,6 +334,48 @@ class ProfileView(LoginRequiredMixin, View):
             return render(request, self.template_name, ctx)
 
         return redirect('users:profile')
+
+
+class SetPasswordView(LoginRequiredMixin, View):
+    """Lets a logged-in (Telegram-authenticated) user set or change a username + password
+    so they can sign in without Telegram."""
+    template_name = 'users/set_password.html'
+
+    def get(self, request):
+        form = SetUsernamePasswordForm(request.user, initial={'username': request.user.username})
+        return render(request, self.template_name, {'form': form})
+
+    def post(self, request):
+        form = SetUsernamePasswordForm(request.user, request.POST)
+        if form.is_valid():
+            user = request.user
+            user.username = form.cleaned_data['username']
+            user.set_password(form.cleaned_data['password1'])
+            user.save(update_fields=['username', 'password'])
+            update_session_auth_hash(request, user)  # keep the current session alive
+            messages.success(request, 'Parol muvaffaqiyatli saqlandi.')
+            return redirect('users:profile')
+        return render(request, self.template_name, {'form': form})
+
+
+class UsernamePasswordLoginView(View):
+    """Username + password login, for users who have set a password in their profile."""
+    template_name = 'registration/login_password.html'
+
+    def get(self, request):
+        if request.user.is_authenticated:
+            return redirect('/users/profile/')
+        return render(request, self.template_name, {'form': UsernamePasswordLoginForm()})
+
+    def post(self, request):
+        form = UsernamePasswordLoginForm(request.POST)
+        if _check_rate_limit(_client_ip(request), max_requests=10, window=60, prefix='login'):
+            form.add_error(None, "Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.")
+            return render(request, self.template_name, {'form': form})
+        if form.is_valid():
+            login(request, form.cleaned_data['user'])
+            return redirect(settings.LOGIN_REDIRECT_URL)
+        return render(request, self.template_name, {'form': form})
 
 
 @method_decorator(user_passes_test(lambda u: u.is_staff or u.is_superuser), name='dispatch')
