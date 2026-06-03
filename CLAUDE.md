@@ -36,6 +36,8 @@ opencourse/                          # Repository root (also Django project root
 │   ├── views.py                     # Auth, profile, admin panel, YouTube API
 │   ├── urls.py
 │   ├── forms.py
+│   ├── management/commands/
+│   │   └── clear_expired_tokens.py  # Deletes TelegramAuthToken rows past their 10-min TTL
 │   └── migrations/
 ├── learning/                        # Course content app
 │   ├── models.py                    # Course, Module, Lesson, LessonProgress, LessonView, Note,
@@ -151,7 +153,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 ### User Models
 
 - **UserProfile** — OneToOne with Django User: `current_streak`, `longest_streak`, `last_activity_date`
-- **TelegramAuthToken** — `token`, `created_at`, `confirmed_at`, `user` (nullable FK), `is_new_user`; expires after 10 minutes
+- **TelegramAuthToken** — `token`, `short_code` (6-digit, blank for browser-flow tokens), `created_at`, `confirmed_at`, `user` (nullable FK), `is_new_user`; expires after 10 minutes. `generate()` mints a pending browser-flow token (no `short_code`); `issue_for_user(user, is_new_user)` mints a pre-confirmed token **with** a `short_code` for the bot-issued code flow. Rows are deleted on successful code login (one-time use), swept opportunistically (~3% of login renders) and by the `clear_expired_tokens` command.
 - **TelegramProfile** — OneToOne with User: `telegram_id`, `first_name`, `last_name`, `username`, `photo_url`
 
 ---
@@ -192,7 +194,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/natija/` | learning | Quiz result with per-question review |
 | `/malaka/<course>/<module>/<lesson>/xatchop/` | learning | POST: save video bookmark (JSON: timestamp, note) |
 | `/malaka/<course>/<module>/<lesson>/xatchop/<id>/ochirish/` | learning | POST: delete video bookmark |
-| `/users/login/` | users | Telegram login (bot-link polling + bot-issued 6-digit code submit; rate-limited 10/min POST per IP) |
+| `/users/login/` | users | Login page: bot-link polling + bot-issued 6-digit code + inline username/password (POST dispatches on fields; honors `?next=`; code & password each rate-limited 10/min per IP) |
 | `/users/signup/` | users | Same flow as login (renders `login.html`; `signup.html` is unused) |
 | `/users/kirish/parol/` | users | Username + password login (rate-limited 10/min per IP) |
 | `/users/parol-ornatish/` | users | Set/change username + password (login required) |
@@ -221,11 +223,14 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 
 New users get `set_unusable_password()` — Telegram-only auth by default.
 
+### The login page (`/users/login/`)
+One page hosts all three sign-in methods. The Telegram bot button is the primary CTA; the **code form** and **inline password form** live inside a collapsed `<details>` ("Boshqa kirish usullari") disclosure that auto-opens when either form returns an error. `TelegramLoginView.post` **dispatches** on the submitted fields: a `username`/`password` POST routes to the password handler, otherwise to the code handler. All three methods honor `?next=` (open-redirect-safe via `_safe_next` / `url_has_allowed_host_and_scheme`; the Telegram poller applies `next` client-side). `_client_ip` reads the **last** `X-Forwarded-For` entry (the proxy-set address a client can't spoof) so the rate limiter can't be bypassed.
+
 ### Code-based login (other device)
-For users on a device without Telegram, the bot issues the code (not the website). User sends `/login` to the bot; the bot POSTs the Telegram identity to `/api/auth/issue-code/` (gated by `X-Bot-Secret`), which calls `_get_or_create_telegram_user(...)` (shared with `/api/auth/confirm/`) and creates a pre-confirmed `TelegramAuthToken` via `TelegramAuthToken.issue_for_user(user, is_new_user)` — `confirmed_at=now`, `user` set, `short_code` set to a fresh 6-digit numeric (unique among tokens issued within the last 10 minutes). Endpoint returns `{short_code, expires_in_seconds: 600}`. The bot replies with the formatted code (e.g. `123 456`). The user types it on `/users/login/`; `TelegramLoginView.post` (rate-limited 10/min per IP via `prefix='code'`) strips non-digits, looks up the latest confirmed unexpired token by `short_code`, logs the user in, and **deletes the token** (one-time use; replays return the same "kod noto'g'ri" error). New users redirect to `/users/profile/`, returning users to `LOGIN_REDIRECT_URL`. `TelegramAuthToken.generate()` no longer sets a `short_code` — only `issue_for_user` does, so browser-flow tokens never collide with bot-issued codes.
+For users on a device without Telegram, the bot issues the code (not the website). User sends `/login` to the bot; the bot POSTs the Telegram identity to `/api/auth/issue-code/` (gated by `X-Bot-Secret`), which calls `_get_or_create_telegram_user(...)` (shared with `/api/auth/confirm/`) and creates a pre-confirmed `TelegramAuthToken` via `TelegramAuthToken.issue_for_user(user, is_new_user)` — `confirmed_at=now`, `user` set, `short_code` set to a fresh 6-digit numeric (unique among tokens issued within the last 10 minutes). Endpoint returns `{short_code, expires_in_seconds: 600}`. The bot replies with the formatted code (e.g. `123 456`). The user types it on `/users/login/`; the code handler (rate-limited 10/min per IP via `prefix='code'`) strips non-digits, looks up the latest confirmed unexpired token by `short_code`, logs the user in, and **deletes the token** (one-time use; replays return the same "kod noto'g'ri" error). New users redirect to `/users/profile/`, returning users to `?next=` or `LOGIN_REDIRECT_URL`. `TelegramAuthToken.generate()` no longer sets a `short_code` — only `issue_for_user` does, so browser-flow tokens never collide with bot-issued codes.
 
 ### Username + password login
-A Telegram-authenticated user can set a username + password at `/users/parol-ornatish/` (`SetUsernamePasswordForm`; username regex `^[a-z0-9_]{3,30}$`, `validate_password`, `update_session_auth_hash` keeps the session). They can then log in without Telegram at `/users/kirish/parol/` (`UsernamePasswordLoginForm`). A password-less account that tries password login gets a specific "set a password first" message rather than a generic error. Password-reset flow is not implemented yet.
+A Telegram-authenticated user can set a username + password at `/users/parol-ornatish/` (`SetUsernamePasswordForm`; username regex `^[a-z0-9_]{3,30}$`, stored lowercased, `validate_password`, `update_session_auth_hash` keeps the session). They can then log in without Telegram — **inline on the login page** (the password handler renders credential errors inline, no separate-page bounce) or via the standalone `/users/kirish/parol/` (`UsernamePasswordLoginView`). Both are rate-limited 10/min per IP via `prefix='login'`. `UsernamePasswordLoginForm` **lowercases** the username before `authenticate` to match the stored casing. A password-less account that tries password login gets a specific "set a password first" message rather than a generic error. **Forgot password:** there is no email reset (accounts are Telegram-only) — the login page tells users to sign in via Telegram and reset from their profile (`/users/parol-ornatish/`). A dedicated reset flow is not implemented.
 
 ---
 
@@ -486,6 +491,8 @@ python manage.py migrate               # apply migrations
 python manage.py collectstatic         # for production static files
 python manage.py shell                 # Django REPL
 python manage.py fill_durations        # populate lesson durations from YouTube API
+python manage.py createcachetable      # provision the DB cache table (rate limiter)
+python manage.py clear_expired_tokens  # delete TelegramAuthToken rows past their 10-min TTL
 ```
 
 ### No Test Suite
@@ -497,8 +504,11 @@ There are no automated tests. Manual testing is the current approach. When addin
 
 CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):
 - Triggers on push to `master`
-- SSHes into the production server
-- Runs: `git pull` → `pip install` → `migrate` → `collectstatic` → `systemctl restart gunicorn-ochiqkurs`
+- SSHes into the production server (`~/opencourse`)
+- Runs: `git restore .` → `git pull` → `pip install` → `migrate` → `createcachetable` → `collectstatic` → `systemctl restart gunicorn-ochiqkurs`
+- Then purges the Cloudflare cache
+
+`createcachetable` provisions the `cache_table` the rate limiter needs (idempotent). Production Gunicorn binds a unix socket (`~/opencourse/gunicorn.sock`) behind nginx, not a TCP port. The Telegram bot is a separate repo/process on the same server (systemd unit `telegram-bot-ochiqkurs`, dir `~/opencourse-bot`) and is **not** deployed by this workflow — push and restart it manually.
 
 Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handles static files.
 
@@ -509,10 +519,10 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 ## Security Notes
 
 - CSRF protection on every POST endpoint. There are **no** CSRF-exempt endpoints in the learning app — the previous `/davom/xabar/` beacon was removed when video-session tracking was retired.
-- Telegram bot callback (`/api/auth/confirm/`) is `@csrf_exempt` but gated by the `X-Bot-Secret` header check against `BOT_SECRET`.
+- Telegram bot callback (`/api/auth/confirm/`) and `/api/auth/issue-code/` are `@csrf_exempt` but gated by the `X-Bot-Secret` header check against `BOT_SECRET`.
 - User-submitted Markdown is sanitized with `bleach` before rendering
 - All security headers enabled: `X-Frame-Options DENY`, `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`
-- Rate limiting on `/api/auth/check/<token>/` (60 req/min)
+- Rate limiting on `/api/auth/check/<token>/` (60 req/min), the code login (10/min per IP, `prefix='code'`), and the password login (10/min per IP, `prefix='login'`). Backed by a **DatabaseCache** (`CACHES` → `cache_table`) so limits are shared across Gunicorn workers and survive restarts — not the per-process default `LocMemCache`. `_client_ip` uses the last `X-Forwarded-For` entry to resist spoofing.
 
 ---
 
