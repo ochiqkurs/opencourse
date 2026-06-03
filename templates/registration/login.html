@@ -22,13 +22,18 @@
     <p id="tg-error" class="form-errors" style="display:none"></p>
   </div>
 
-  <details class="login-alt"{% if code_error %} open{% endif %}>
+  <details class="login-alt"{% if code_error or pwd_error %} open{% endif %}>
     <summary>Boshqa kirish usullari</summary>
 
     <div class="login-alt-body">
-      <p class="login-alt-label">Bot'dan olingan kod</p>
+      <p class="login-alt-label">Telegramsiz qurilmadan kod bilan</p>
+      <p class="login-alt-hint">
+        <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener noreferrer">@{{ bot_username }}</a>
+        botiga <code class="login-cmd">/login</code> yuboring — bot 6 xonali kod beradi.
+      </p>
       <form method="post" class="login-code-form" novalidate>
         {% csrf_token %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
         <input type="text" name="short_code" inputmode="numeric" pattern="[0-9]*" maxlength="7"
                autocomplete="one-time-code" class="login-code-input"
                placeholder="123 456" value="{{ code_value }}" aria-label="Kod">
@@ -36,7 +41,23 @@
       </form>
       {% if code_error %}<p class="form-errors login-code-error">{{ code_error }}</p>{% endif %}
 
-      <a href="{% url 'users:login_password' %}" class="login-alt-link">Parol bilan kirish &rarr;</a>
+      <hr class="login-alt-sep">
+
+      <p class="login-alt-label">Username va parol bilan</p>
+      <form method="post" class="login-pwd-form">
+        {% csrf_token %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <input type="text" name="username" class="form-input" autocapitalize="none"
+               placeholder="Username" aria-label="Username" value="{{ pwd_username }}" required>
+        <input type="password" name="password" class="form-input"
+               placeholder="Parol" aria-label="Parol" required>
+        <button type="submit" class="btn btn-secondary login-pwd-submit">Kirish</button>
+      </form>
+      {% if pwd_error %}<p class="form-errors login-code-error">{{ pwd_error }}</p>{% endif %}
+      <p class="login-alt-hint login-forgot">
+        Parolni unutdingizmi? Yuqoridagi Telegram tugmasi orqali kiring va
+        <a href="{% url 'users:set_password' %}">profildan yangilang</a>.
+      </p>
     </div>
   </details>
 </div>
@@ -47,6 +68,7 @@
     var statusBox = document.getElementById('tg-status');
     var errorEl = document.getElementById('tg-error');
     var token = '{{ token }}';
+    var nextUrl = '{{ next|escapejs }}';
     var pollInterval = null;
 
     btn.addEventListener('click', function () {
@@ -66,7 +88,12 @@
         .then(function (data) {
           if (data.status === 'confirmed') {
             clearInterval(pollInterval);
-            window.location.href = data.redirect;
+            // Honor ?next= (same-origin relative path only) over the server default.
+            var dest = data.redirect;
+            if (nextUrl && nextUrl.charAt(0) === '/' && nextUrl.charAt(1) !== '/') {
+              dest = nextUrl;
+            }
+            window.location.href = dest;
           } else if (data.status === 'expired') {
             clearInterval(pollInterval);
             showError('Havola muddati tugadi. Sahifani yangilang.');

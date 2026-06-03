@@ -2027,6 +2027,11 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   font-size: .8rem; font-weight: 600; color: var(--text-soft);
   margin-bottom: 8px; letter-spacing: .02em;
 }
+.login-alt-hint {
+  font-size: .82rem; color: var(--muted);
+  margin-bottom: 12px; line-height: 1.5;
+}
+.login-alt-hint a { color: var(--brand-600); font-weight: 600; }
 .login-code-form {
   display: flex; gap: 8px; align-items: stretch;
 }
@@ -2046,11 +2051,14 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .login-code-input::placeholder { color: var(--text-soft); letter-spacing: .18em; font-weight: 500; }
 .login-code-submit { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
 .login-code-error { margin-top: 10px; text-align: left; }
-.login-alt-link {
-  display: block; margin-top: 16px;
-  font-size: .85rem; font-weight: 600;
-  color: var(--brand-600);
+.login-alt-sep {
+  border: none; border-top: 1px solid var(--border);
+  margin: 22px 0 18px;
 }
+.login-pwd-form { display: flex; flex-direction: column; gap: 8px; }
+.login-pwd-form .form-input { width: 100%; }
+.login-pwd-submit { margin-top: 2px; }
+.login-forgot { margin-top: 14px; margin-bottom: 0; }
 .login-form { text-align: left; margin-top: 8px; }
 .ps-text { color: var(--text-soft); font-size: .92rem; margin-bottom: 14px; }
 

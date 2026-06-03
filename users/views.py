@@ -1,4 +1,5 @@
 import json
+import random
 import re
 import requests as http_requests
 from datetime import timedelta
@@ -14,6 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -31,18 +33,53 @@ from .models import TelegramAuthToken, TelegramProfile
 
 
 def _client_ip(request):
-    return (
-        request.META.get('HTTP_X_FORWARDED_FOR', '') or
-        request.META.get('REMOTE_ADDR', '')
-    ).split(',')[0].strip()
+    """Best-effort real client IP.
+
+    Behind a single proxy (nginx sets `X-Forwarded-For: <client-supplied>, <real>`),
+    the last entry is the address the proxy observed and is the only one a remote
+    client cannot spoof. Fall back to REMOTE_ADDR when there is no XFF header.
+    """
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        return xff.split(',')[-1].strip()
+    return request.META.get('REMOTE_ADDR', '').strip()
 
 
 def _check_rate_limit(ip, max_requests=60, window=60, prefix='check'):
     """Fixed-window rate limiter using Django cache. Returns True if limit exceeded."""
     key = f'rl:{prefix}:{ip}'
     cache.add(key, 0, window)
-    count = cache.incr(key)
+    try:
+        count = cache.incr(key)
+    except ValueError:
+        # Key expired between add and incr; treat as a fresh window.
+        cache.set(key, 1, window)
+        count = 1
     return count > max_requests
+
+
+def _safe_next(request):
+    """Return a same-origin redirect target from ?next= / POSTed next, else ''.
+
+    Guards against open-redirect: only same-host, same-scheme relative paths pass.
+    """
+    nxt = request.POST.get('next') or request.GET.get('next') or ''
+    if nxt and url_has_allowed_host_and_scheme(
+        nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return nxt
+    return ''
+
+
+def _cleanup_expired_tokens():
+    """Opportunistically delete auth tokens past their 10-minute TTL.
+
+    Called probabilistically from the login page render so the table stays bounded
+    without a cron. The `clear_expired_tokens` management command does the same job
+    deterministically.
+    """
+    cutoff = timezone.now() - timedelta(minutes=10)
+    TelegramAuthToken.objects.filter(created_at__lt=cutoff).delete()
 
 
 def _get_or_create_telegram_user(telegram_id, first_name, last_name, username, photo_url):
@@ -85,29 +122,37 @@ def _get_or_create_telegram_user(telegram_id, first_name, last_name, username, p
 
 
 class TelegramLoginView(View):
-    """Login page: bot-link auth (polling) + bot-issued 6-digit code submission."""
+    """Login page. Handles three sign-in methods on one page:
+      - bot-link auth (browser polls CheckTokenView),
+      - bot-issued 6-digit code (the code form),
+      - username + password (the inline password form).
+    """
     template_name = 'registration/login.html'
 
     def get(self, request):
         if request.user.is_authenticated:
             return redirect('/users/profile/')
-        return render(request, self.template_name, self._context())
+        return render(request, self.template_name, self._context(request))
 
     def post(self, request):
         if request.user.is_authenticated:
             return redirect('/users/profile/')
+        # The password form carries username/password; the code form carries short_code.
+        if 'username' in request.POST or 'password' in request.POST:
+            return self._handle_password(request)
+        return self._handle_code(request)
 
+    def _handle_code(self, request):
         if _check_rate_limit(_client_ip(request), max_requests=10, window=60, prefix='code'):
             return render(request, self.template_name, self._context(
-                code_error="Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.",
+                request, code_error="Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.",
             ))
 
         raw = request.POST.get('short_code', '')
         code = re.sub(r'\D', '', raw)
         if len(code) != 6:
             return render(request, self.template_name, self._context(
-                code_error="Kod 6 ta raqamdan iborat bo'lishi kerak.",
-                code_value=raw,
+                request, code_error="Kod 6 ta raqamdan iborat bo'lishi kerak.", code_value=raw,
             ))
 
         cutoff = timezone.now() - timedelta(minutes=10)
@@ -125,7 +170,7 @@ class TelegramLoginView(View):
         )
         if auth_token is None:
             return render(request, self.template_name, self._context(
-                code_error="Kod noto'g'ri yoki muddati tugagan. Botdan yangi kod oling.",
+                request, code_error="Kod noto'g'ri yoki muddati tugagan. Botdan yangi kod oling.",
                 code_value=raw,
             ))
 
@@ -133,10 +178,36 @@ class TelegramLoginView(View):
         is_new_user = auth_token.is_new_user
         auth_token.delete()  # one-time use
         login(request, user)
-        redirect_url = '/users/profile/' if is_new_user else settings.LOGIN_REDIRECT_URL
-        return redirect(redirect_url)
+        return redirect(self._post_login_url(request, is_new_user))
 
-    def _context(self, code_error=None, code_value=''):
+    def _handle_password(self, request):
+        form = UsernamePasswordLoginForm(request.POST)
+        if _check_rate_limit(_client_ip(request), max_requests=10, window=60, prefix='login'):
+            return render(request, self.template_name, self._context(
+                request, pwd_error="Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.",
+                pwd_username=request.POST.get('username', ''),
+            ))
+        if form.is_valid():
+            login(request, form.cleaned_data['user'])
+            return redirect(self._post_login_url(request, is_new_user=False))
+        # Surface the form's non-field error inline (bad credentials / passwordless account).
+        errors = form.non_field_errors()
+        return render(request, self.template_name, self._context(
+            request,
+            pwd_error=errors[0] if errors else "Username yoki parol noto'g'ri.",
+            pwd_username=request.POST.get('username', ''),
+        ))
+
+    def _post_login_url(self, request, is_new_user):
+        nxt = _safe_next(request)
+        if nxt:
+            return nxt
+        return '/users/profile/' if is_new_user else settings.LOGIN_REDIRECT_URL
+
+    def _context(self, request, code_error=None, code_value='', pwd_error=None, pwd_username=''):
+        # Keep the token table bounded without a cron (≈3% of renders run the sweep).
+        if random.random() < 0.03:
+            _cleanup_expired_tokens()
         auth_token = TelegramAuthToken.generate()
         bot_username = getattr(settings, 'TELEGRAM_BOT_USERNAME', 'ochiqkurs_bot')
         bot_url = f'https://t.me/{bot_username}?start={auth_token.token}'
@@ -146,6 +217,9 @@ class TelegramLoginView(View):
             'bot_username': bot_username,
             'code_error': code_error,
             'code_value': code_value,
+            'pwd_error': pwd_error,
+            'pwd_username': pwd_username,
+            'next': _safe_next(request),
         }
 
 
@@ -258,7 +332,7 @@ class CheckTokenView(View):
 
         if auth_token.confirmed_at and auth_token.user:
             login(request, auth_token.user)
-            redirect_url = '/users/profile/' if auth_token.is_new_user else '/'
+            redirect_url = '/users/profile/' if auth_token.is_new_user else settings.LOGIN_REDIRECT_URL
             return JsonResponse({'status': 'confirmed', 'redirect': redirect_url})
 
         return JsonResponse({'status': 'pending'})
@@ -437,17 +511,17 @@ class UsernamePasswordLoginView(View):
     def get(self, request):
         if request.user.is_authenticated:
             return redirect('/users/profile/')
-        return render(request, self.template_name, {'form': UsernamePasswordLoginForm()})
+        return render(request, self.template_name, {'form': UsernamePasswordLoginForm(), 'next': _safe_next(request)})
 
     def post(self, request):
         form = UsernamePasswordLoginForm(request.POST)
         if _check_rate_limit(_client_ip(request), max_requests=10, window=60, prefix='login'):
             form.add_error(None, "Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.")
-            return render(request, self.template_name, {'form': form})
+            return render(request, self.template_name, {'form': form, 'next': _safe_next(request)})
         if form.is_valid():
             login(request, form.cleaned_data['user'])
-            return redirect(settings.LOGIN_REDIRECT_URL)
-        return render(request, self.template_name, {'form': form})
+            return redirect(_safe_next(request) or settings.LOGIN_REDIRECT_URL)
+        return render(request, self.template_name, {'form': form, 'next': _safe_next(request)})
 
 
 @method_decorator(user_passes_test(lambda u: u.is_staff or u.is_superuser), name='dispatch')
