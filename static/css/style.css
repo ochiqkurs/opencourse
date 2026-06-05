@@ -748,7 +748,6 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
 .badge-amber { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
 .badge-rose { background: #FEF2F2; color: #9F1239; border-color: #FECDD3; }
 .badge-sky { background: #EFF6FF; color: #1E40AF; border-color: #BFDBFE; }
-.badge-violet { background: #F5F3FF; color: #5B21B6; border-color: #DDD6FE; }
 .badge-success { background: var(--brand-50); color: var(--brand-800); border-color: var(--brand-200); }
 .badge-dark { background: var(--gray-900); color: #fff; border-color: var(--gray-900); }
 .badge-lg { padding: 5px 14px; font-size: .82rem; }
@@ -2098,7 +2097,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   margin-bottom: 16px;
 }
 .cert-paper .cert-eyebrow {
-  font-size: .8rem; text-transform: uppercase; letter-spacing: .25em;
+  font-size: .8rem; text-transform: uppercase; letter-spacing: .12em;
   color: var(--muted); font-weight: 700;
   margin-bottom: 8px;
 }
