@@ -982,15 +982,6 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   font-size: .82rem;
   margin-bottom: 16px;
 }
-.hero-eyebrow .dot {
-  width: 6px; height: 6px; background: var(--brand-500); border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(16,185,129,.25);
-  animation: ping 1.8s infinite;
-}
-@keyframes ping {
-  0% { box-shadow: 0 0 0 0 rgba(16,185,129,.5); }
-  100% { box-shadow: 0 0 0 8px rgba(16,185,129, 0); }
-}
 .hero-title {
   font-family: var(--font-head);
   font-size: clamp(2rem, 3.4vw + 1rem, 3.6rem);
