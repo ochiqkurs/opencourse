@@ -167,9 +167,7 @@ html[data-theme="dark"] {
   top: 0;
   z-index: 100;
   height: var(--nav-h);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .navbar-inner {
@@ -317,7 +315,7 @@ html[data-theme="dark"] {
   text-decoration: none;
   border: 1px solid transparent;
   white-space: nowrap;
-  transition: all var(--t-fast);
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
   cursor: pointer;
 }
 .navbar-btn-outline {
@@ -615,7 +613,7 @@ details[open] > .subskill-summary::after { transform: rotate(45deg); }
   border: 1px solid var(--border);
   border-radius: var(--r-full);
   color: var(--muted);
-  transition: all var(--t-fast);
+  transition: color var(--t-fast), border-color var(--t-fast);
 }
 .footer-social a:hover {
   color: var(--brand-600);
@@ -638,7 +636,7 @@ details[open] > .subskill-summary::after { transform: rotate(45deg); }
   letter-spacing: -0.005em;
   cursor: pointer;
   text-decoration: none;
-  transition: all var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
   user-select: none;
   white-space: nowrap;
 }
@@ -762,7 +760,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   font-size: .85rem;
   font-weight: 500;
   text-decoration: none;
-  transition: all var(--t-fast);
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   cursor: pointer;
 }
 .chip:hover { background: var(--surface); border-color: var(--brand-300); color: var(--brand-700); }
@@ -777,7 +775,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   transition: box-shadow var(--t-base), transform var(--t-base), border-color var(--t-base);
 }
 .card-elev { box-shadow: var(--shadow-md); border-color: transparent; }
-.card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.card-hover:hover { box-shadow: var(--shadow-md); }
 
 /* Course card */
 .course-card {
@@ -830,7 +828,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   color: var(--brand-700);
   border-radius: 50%;
   display: grid; place-items: center;
-  transition: all var(--t-base);
+  transition: opacity var(--t-base), transform var(--t-base);
 }
 .course-card:hover .play-icon { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
@@ -944,20 +942,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   position: relative;
   padding: 72px 0 60px;
   overflow: hidden;
-  background:
-    radial-gradient(70% 80% at 100% 0%, rgba(16,185,129,.13), transparent 60%),
-    radial-gradient(60% 60% at 0% 100%, rgba(110, 231, 183, .14), transparent 50%),
-    var(--bg);
-}
-.hero-modern::before {
-  content: '';
-  position: absolute; inset: 0;
-  background-image:
-    radial-gradient(circle at 25% 30%, rgba(16,185,129,.07) 0, transparent 2px),
-    radial-gradient(circle at 75% 70%, rgba(16,185,129,.05) 0, transparent 2px);
-  background-size: 32px 32px;
-  pointer-events: none;
-  opacity: .8;
+  background: var(--bg);
 }
 .hero-inner {
   position: relative;
@@ -1036,10 +1021,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
 .hero-visual .hv-illus {
   position: absolute;
   inset: 30px 20px 30px 20px;
-  background:
-    radial-gradient(circle at 30% 30%, var(--brand-200) 0%, transparent 50%),
-    radial-gradient(circle at 70% 70%, var(--brand-300) 0%, transparent 60%),
-    var(--brand-600);
+  background: var(--brand-600);
   border-radius: var(--r-2xl);
   opacity: .92;
   z-index: 0;
@@ -1085,7 +1067,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   padding: 28px;
   transition: transform var(--t-base), box-shadow var(--t-base);
 }
-.feature:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.feature:hover { box-shadow: var(--shadow-md); }
 .feature .f-icon {
   width: 54px; height: 54px;
   display: grid; place-items: center;
@@ -1113,7 +1095,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   color: var(--text);
   text-decoration: none;
   overflow: hidden;
-  transition: all var(--t-base) var(--ease);
+  transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
 }
 .cat-card::after {
   content: ''; position: absolute; right: -28px; bottom: -28px;
@@ -1123,7 +1105,7 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   opacity: .35;
   transition: transform var(--t-base);
 }
-.cat-card:hover { transform: translateY(-2px); border-color: var(--brand-300); box-shadow: var(--shadow-md); }
+.cat-card:hover { border-color: var(--brand-300); box-shadow: var(--shadow-md); }
 .cat-card:hover::after { transform: scale(1.4); }
 .cat-card .c-icon {
   width: 44px; height: 44px;
@@ -1151,11 +1133,6 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   align-items: center;
   overflow: hidden;
   position: relative;
-}
-.cta-banner::before {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(circle at 90% 10%, rgba(255,255,255,.15) 0%, transparent 40%);
-  pointer-events: none;
 }
 .cta-banner h2 { color: #fff; font-size: clamp(1.4rem, 1.6vw + .8rem, 2rem); margin: 0 0 8px; }
 .cta-banner p { color: rgba(255,255,255,.85); margin: 0; max-width: 520px; }
@@ -1232,15 +1209,6 @@ form p label { font-weight: 600; font-size: .9rem; display: block; margin-bottom
   margin-bottom: 32px;
   position: relative;
   overflow: hidden;
-}
-.course-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(60% 60% at 100% 0%, rgba(16,185,129, .18), transparent 60%),
-    radial-gradient(50% 50% at 0% 100%, rgba(110, 231, 183, .1), transparent 60%);
-  pointer-events: none;
 }
 .course-hero-inner {
   position: relative;
@@ -1743,12 +1711,6 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   position: relative;
   overflow: hidden;
 }
-.dashboard-hero::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: radial-gradient(60% 80% at 90% 10%, rgba(255,255,255,.18), transparent 60%);
-  pointer-events: none;
-}
 .dashboard-hero .welcome {
   font-family: var(--font-head);
   font-size: 1.7rem; font-weight: 800; line-height: 1.1;
@@ -1888,7 +1850,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   gap: 10px;
   transition: box-shadow var(--t-base), transform var(--t-base);
 }
-.continue-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--brand-200); }
+.continue-card:hover { box-shadow: var(--shadow-md); border-color: var(--brand-200); }
 .continue-card .cc-title {
   font-family: var(--font-head);
   font-weight: 700; font-size: 1rem; color: var(--text);
@@ -1925,7 +1887,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   color: var(--text);
   transition: transform var(--t-base), box-shadow var(--t-base);
 }
-.cert-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.cert-card:hover { box-shadow: var(--shadow-md); }
 .cert-card .cert-medal {
   width: 36px; height: 36px;
   background: var(--brand-600); color: #fff;
@@ -1972,7 +1934,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   font-weight: 600;
   font-size: 1rem;
   box-sizing: border-box;
-  transition: all var(--t-fast);
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
 }
 .login-box .tg-btn:hover { background: #0077B5; color: #fff; transform: translateY(-1px); box-shadow: 0 6px 14px -4px rgba(0,136,204,.5); }
 .tg-note { font-size: .85em; color: var(--muted); margin-top: 14px; }
@@ -2065,9 +2027,6 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   position: relative;
   text-align: center;
   color: var(--gray-900);
-  background-image:
-    radial-gradient(circle at 0% 0%, rgba(16,185,129,.08) 0%, transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(16,185,129,.08) 0%, transparent 40%);
 }
 .cert-paper::before {
   content: '';
@@ -2195,7 +2154,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   color: var(--muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all var(--t-fast);
+  transition: color var(--t-fast), border-color var(--t-fast);
 }
 .admin-tab.active, .admin-tab[aria-selected="true"] {
   color: var(--text);
@@ -2235,17 +2194,6 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .flex-wrap { flex-wrap: wrap; }
-
-.skeleton {
-  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-  border-radius: var(--r-sm);
-}
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 
 /* ── Legacy aliases ───────────────────────────────────────── */
 .hero { padding: 64px 0; }
@@ -2297,27 +2245,8 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .hero-pro {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(900px 480px at 92% -10%, rgba(245, 158, 11, .14), transparent 60%),
-    radial-gradient(700px 480px at 0% 110%, rgba(16, 185, 129, .14), transparent 60%),
-    linear-gradient(180deg, var(--surface), var(--bg) 65%);
+  background: var(--surface);
   padding: 56px 24px 64px;
-}
-.hero-pro::before {
-  content: "";
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(16,24,40,0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16,24,40,0.045) 1px, transparent 1px);
-  background-size: 36px 36px;
-  -webkit-mask-image: radial-gradient(900px 460px at 60% 25%, #000, transparent 75%);
-          mask-image: radial-gradient(900px 460px at 60% 25%, #000, transparent 75%);
-  pointer-events: none;
-}
-html[data-theme="dark"] .hero-pro::before {
-  background-image:
-    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
 }
 .hero-pro-inner {
   position: relative;
@@ -2386,7 +2315,7 @@ html[data-theme="dark"] .hero-pro::before {
   color: var(--text-soft);
   font-size: .85rem;
   font-weight: 500;
-  transition: all var(--t-fast);
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
   text-decoration: none;
 }
 .chip-soft:hover {
@@ -2429,9 +2358,7 @@ html[data-theme="dark"] .chip-soft:hover { background: rgba(16,185,129,.12); }
 }
 .hp-thumb {
   aspect-ratio: 16/9;
-  background:
-    radial-gradient(180px 120px at 30% 30%, rgba(255,255,255,.3), transparent 70%),
-    linear-gradient(135deg, var(--brand-500), var(--brand-800));
+  background: var(--brand-600);
 }
 .hp-body { padding: 16px 18px 20px; }
 .hp-cat { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--brand-700); font-weight: 700; }
@@ -2536,12 +2463,11 @@ html[data-theme="dark"] .announce-bar {
   width: 32px; height: 32px;
   display: inline-grid; place-items: center;
   border: 0;
-  background: rgba(17, 24, 39, .55);
+  background: rgba(17, 24, 39, .75);
   color: #fff;
   border-radius: 50%;
   cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition: all var(--t-fast);
+  transition: background var(--t-fast), color var(--t-fast);
   z-index: 4;
 }
 .course-card-heart:hover { background: rgba(239, 68, 68, .9); }
@@ -2653,7 +2579,7 @@ html[data-theme="dark"] .cs-list a.active { background: rgba(16,185,129,.15); co
   font-weight: 600;
   text-decoration: none;
   border-bottom: 2px solid transparent;
-  transition: all var(--t-fast);
+  transition: color var(--t-fast), border-color var(--t-fast);
   position: relative;
   top: 1px;
 }
@@ -2682,7 +2608,7 @@ html[data-theme="dark"] .cs-list a.active { background: rgba(16,185,129,.15); co
   display: flex; flex-direction: column;
   transition: transform var(--t-base), box-shadow var(--t-base);
 }
-.ml-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.ml-card:hover { box-shadow: var(--shadow-md); }
 .ml-thumb {
   position: relative; aspect-ratio: 16/9;
   background: var(--surface-3);
@@ -2851,7 +2777,7 @@ html[data-theme="dark"] .ld-tabs button.active .tab-count { background: rgba(16,
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  transition: all var(--t-fast);
+  transition: border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
 }
 .resource-item:hover { border-color: var(--brand-300); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .ri-ico {
@@ -3017,18 +2943,6 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 @keyframes content-fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Skeleton shimmer ─────────────────────────────────────────── */
-.skeleton {
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-  border-radius: 8px;
-}
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 /* ── Form inputs ──────────────────────────────────────────────── */
@@ -3353,7 +3267,7 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
   border-radius: var(--r-lg); text-decoration: none; color: inherit;
   transition: box-shadow .2s, transform .2s;
 }
-.path-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+.path-card:hover { box-shadow: var(--shadow-lift); }
 .path-card-body { flex: 1; }
 .path-card-body h3 { font-size: 1.05rem; margin-bottom: 8px; }
 .path-card-body p { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px; }
