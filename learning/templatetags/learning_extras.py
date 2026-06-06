@@ -99,3 +99,25 @@ def initials(name):
     if len(parts) == 1:
         return parts[0][:2].upper()
     return (parts[0][0] + parts[-1][0]).upper()
+
+
+_UZ_MONTHS = [
+    '', 'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+]
+
+
+@register.filter
+def uz_date(value):
+    """Format a date/datetime in Uzbek, e.g. '6-iyun, 2026-yil'.
+
+    Django's built-in `date` filter renders English month names because
+    LANGUAGE_CODE is 'en-us' ('06 Jun 2026'), which looks wrong on a formal
+    Uzbek certificate.
+    """
+    if not value:
+        return ''
+    try:
+        return f"{value.day}-{_UZ_MONTHS[value.month]}, {value.year}-yil"
+    except (AttributeError, IndexError):
+        return ''

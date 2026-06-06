@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load learning_extras %}
 
 {% block title %}Sertifikat tekshirish – {{ course.title }}{% endblock %}
 
@@ -29,7 +30,7 @@
         <span class="cert-code-value">{{ certificate.code }}</span>
       </div>
       <div class="cert-date">
-        Berilgan sana: {{ certificate.issued_at|date:"d M Y" }}
+        Berilgan sana: {{ certificate.issued_at|uz_date }}
       </div>
     </div>
   </div>
