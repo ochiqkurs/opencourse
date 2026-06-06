@@ -7,7 +7,7 @@
 <div class="container search-page" style="padding-top:8px">
   <h1>Qidiruv natijalari</h1>
   {% if q %}
-    <p class="sr-meta">"<strong>{{ q }}</strong>" so'rovi bo'yicha {{ courses|length|add:lessons|length }} ta natija topildi.</p>
+    <p class="sr-meta">"<strong>{{ q }}</strong>" so'rovi bo'yicha {{ result_count }} ta natija topildi.</p>
   {% else %}
     <p class="sr-meta">Qidiruv satriga so'z yozing.</p>
   {% endif %}

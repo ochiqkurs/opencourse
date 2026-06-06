@@ -206,7 +206,8 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 ### Streak System
 - Updated whenever a `LessonView` is recorded **or** the manual complete button is pressed.
 - `current_streak` = consecutive days with at least one qualifying activity; `longest_streak` = max ever seen.
-- All streak calculations use Asia/Tashkent timezone (`_today_uzt()` in `learning/views.py`).
+- `current_streak` is only bumped on activity, so the stored value goes stale once a user lapses. Displays (dashboard + leaderboard) read `UserProfile.live_streak`, which returns the stored streak only when the last activity was today or yesterday and `0` once it has been broken.
+- All streak calculations use Asia/Tashkent timezone (`_today_uzt()` in `learning/views.py`; `live_streak` uses `timezone.localdate()`, which resolves to the same `Asia/Tashkent` date).
 
 ### Activity Heatmap
 - Backed by `LessonView` (not minutes-watched). The dashboard counts distinct lessons per day and bucket-renders them as:
@@ -254,8 +255,8 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 
 ### Course Publishing Workflow
 - Courses have a `status` field: `draft`, `published`, `archived` (default `published` for existing).
-- All public catalog views (`CourseListView`, `SearchView`, `CategoryDetailView`, `HomeView`) filter to `status='published'`.
-- `CourseDetailView` returns 404 for non-published courses unless the user is staff/superuser.
+- All public catalog views (`CourseListView`, `SearchView`, `CategoryDetailView`, `HomeView`) filter to `status='published'` — `SearchView`'s lesson results are scoped to `module__course__status='published'` too, so draft lessons never leak into search.
+- `CourseDetailView`, `ModuleDetailView`, and `LessonDetailView` all return 404 for non-published courses unless the user is staff/superuser, so a draft course's modules and lessons aren't reachable by direct URL.
 - Admin: `list_filter` by status, three bulk actions (`make_published`, `make_draft`, `make_archived`).
 
 ### Quizzes

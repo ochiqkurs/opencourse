@@ -342,7 +342,7 @@ class ProfileView(LoginRequiredMixin, View):
     template_name = 'users/profile.html'
 
     def _base_context(self, request):
-        from datetime import timedelta, date
+        from datetime import timedelta
         from django.db.models import Count
         from users.models import UserProfile
 
@@ -351,7 +351,9 @@ class ProfileView(LoginRequiredMixin, View):
         user_lesson_views = LessonView.objects.filter(user=user).count()
 
         # Activity graph — last 365 days, counting distinct lessons watched per day.
-        since = date.today() - timedelta(days=364)
+        # Use the project timezone (Asia/Tashkent) so the day buckets line up with
+        # how LessonView.viewed_on is stamped; date.today() would use server time.
+        since = timezone.localdate() - timedelta(days=364)
         raw_activity = (
             LessonView.objects
             .filter(user=user, viewed_on__gte=since)
@@ -363,7 +365,7 @@ class ProfileView(LoginRequiredMixin, View):
             for row in raw_activity
         }
 
-        today = date.today()
+        today = timezone.localdate()
         # 364 kun oldindan boshlab bugunga qadar
         days = [today - timedelta(days=i) for i in range(364, -1, -1)]
 
@@ -442,7 +444,7 @@ class ProfileView(LoginRequiredMixin, View):
             'password_form': PasswordChangeForm(user) if user.has_usable_password() else SetPasswordForm(user),
             'activity_map': activity_map,
             'weeks': weeks,
-            'current_streak': profile.current_streak,
+            'current_streak': profile.live_streak,
             'longest_streak': profile.longest_streak,
             'in_progress_courses': in_progress_courses,
             'certificates': certificates,
@@ -459,7 +461,7 @@ class ProfileView(LoginRequiredMixin, View):
             form = UserProfileForm(request.POST, instance=user)
             if form.is_valid():
                 form.save()
-                messages.success(request, 'Profile updated successfully.')
+                messages.success(request, 'Profil ma\'lumotlari saqlandi.')
                 return redirect('users:profile')
             ctx = self._base_context(request)
             ctx['form'] = form

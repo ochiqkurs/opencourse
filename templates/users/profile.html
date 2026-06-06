@@ -187,6 +187,7 @@
       <div class="form-group">
         <label for="id_email">Email</label>
         <input type="email" name="email" id="id_email" value="{{ user.email }}" class="form-input">
+        {% if form.email.errors %}<div class="form-error">{{ form.email.errors }}</div>{% endif %}
       </div>
       <button type="submit" class="btn btn-primary">Saqlash</button>
     </form>

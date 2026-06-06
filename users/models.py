@@ -15,6 +15,20 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} profile"
 
+    @property
+    def live_streak(self):
+        """Streak that has not lapsed.
+
+        `current_streak` is only bumped when activity happens, so a stored value
+        of e.g. 5 keeps showing even after the user has been away for a week. A
+        streak is still alive only if the last activity was today or yesterday
+        (Asia/Tashkent); otherwise it has been broken and the live value is 0.
+        """
+        if not self.last_activity_date:
+            return 0
+        gap = (timezone.localdate() - self.last_activity_date).days
+        return self.current_streak if gap <= 1 else 0
+
 
 class TelegramAuthToken(models.Model):
     token = models.CharField(max_length=64, unique=True)

@@ -15,7 +15,7 @@ class UserProfileForm(forms.ModelForm):
     """
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name']
+        fields = ['username', 'first_name', 'last_name', 'email']
         widgets = {
             'username': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -28,6 +28,10 @@ class UserProfileForm(forms.ModelForm):
             'last_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Last name',
+            }),
+            'email': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Email',
             }),
         }
 

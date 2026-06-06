@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load learning_extras %}
 
-{% block title %}{{ instructor.first_name }} {{ instructor.last_name }} – Ochiq Kurs{% endblock %}
+{% block title %}{{ display_name }} – Ochiq Kurs{% endblock %}
 
 {% block content %}
 <div class="instructor-page">
@@ -13,8 +13,8 @@
         <span style="font-size:2rem;font-weight:700">{{ instructor.first_name|default:instructor.username|slice:":1"|upper }}</span>
       {% endif %}
     </span>
-    <h1>{{ instructor.first_name }} {{ instructor.last_name }}</h1>
-    {% if instructor.instructor_bio %}<p class="instructor-bio">{{ instructor.instructor_bio }}</p>{% endif %}
+    <h1>{{ display_name }}</h1>
+    {% if bio %}<p class="instructor-bio">{{ bio }}</p>{% endif %}
     <div class="instructor-stats">
       <div class="instat"><strong>{{ total_courses }}</strong> <span>kurs</span></div>
       <div class="instat"><strong>{{ total_students }}</strong> <span>o'quvchi</span></div>

@@ -6,7 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import transaction
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, Q, OuterRef, Subquery, IntegerField
+from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
@@ -34,9 +35,16 @@ def _today_uzt():
 
 
 def _course_card_annotations(qs):
+    # Aggregate lessons via correlated subqueries so that the `enrollments` JOIN
+    # cannot multiply the per-lesson rows. Doing all three in one multi-join
+    # query inflated `total_duration` by the number of enrollments (every lesson
+    # duration was summed once per enrolled student).
+    course_lessons = Lesson.objects.filter(module__course=OuterRef('pk')).order_by()
+    lesson_count_sq = course_lessons.values('module__course').annotate(n=Count('id')).values('n')
+    duration_sq = course_lessons.values('module__course').annotate(s=Sum('duration_seconds')).values('s')
     return qs.annotate(
-        lesson_count=Count('modules__lessons', distinct=True),
-        total_duration=Sum('modules__lessons__duration_seconds'),
+        lesson_count=Coalesce(Subquery(lesson_count_sq, output_field=IntegerField()), 0),
+        total_duration=Coalesce(Subquery(duration_sq, output_field=IntegerField()), 0),
         student_count=Count('enrollments', distinct=True),
     )
 
@@ -295,7 +303,8 @@ class SearchView(View):
             )[:20])
             lessons = list(
                 Lesson.objects.filter(
-                    Q(title__icontains=q) | Q(description__icontains=q)
+                    Q(title__icontains=q) | Q(description__icontains=q),
+                    module__course__status='published',
                 ).select_related('module__course')[:20]
             )
 
@@ -323,6 +332,7 @@ class SearchView(View):
             'q': q,
             'courses': courses,
             'lessons': lessons,
+            'result_count': len(courses) + len(lessons),
             'wishlist_ids': _user_wishlist_ids(request.user),
         })
 
@@ -468,6 +478,8 @@ class ModuleDetailView(View):
 
     def get(self, request, course_slug, module_slug):
         course = get_object_or_404(Course, slug=course_slug)
+        if course.status != 'published' and not (request.user.is_staff or request.user.is_superuser):
+            raise Http404
         module = get_object_or_404(Module, slug=module_slug, course=course)
 
         lessons = list(module.lessons.order_by('order'))
@@ -505,6 +517,8 @@ class LessonDetailView(View):
 
     def get(self, request, course_slug, module_slug, lesson_slug):
         course = get_object_or_404(Course, slug=course_slug)
+        if course.status != 'published' and not (request.user.is_staff or request.user.is_superuser):
+            raise Http404
         module = get_object_or_404(Module, slug=module_slug, course=course)
         lesson = get_object_or_404(Lesson, slug=lesson_slug, module=module)
 
@@ -1009,7 +1023,7 @@ def leaderboard_view(request):
             'user': u,
             'views': r['views'],
             'completed': completed_counts.get(u.id, 0),
-            'streak': prof.current_streak if prof else 0,
+            'streak': prof.live_streak if prof else 0,
             'longest_streak': prof.longest_streak if prof else 0,
         })
 
@@ -1446,11 +1460,17 @@ class InstructorDetailView(View):
         total_courses = len(courses)
         total_lessons = sum(c.lesson_count for c in courses)
         profile = getattr(instructor, 'telegram_profile', None)
+        # The bio lives on the Course model (instructor_bio); surface the first
+        # non-empty one. `instructor` is a User, which has no such field.
+        bio = next((c.instructor_bio for c in courses if c.instructor_bio), '')
+        display_name = instructor.get_full_name() or instructor.username
 
         return render(request, self.template_name, {
             'instructor': instructor,
             'profile': profile,
             'courses': courses,
+            'bio': bio,
+            'display_name': display_name,
             'total_students': total_students,
             'total_courses': total_courses,
             'total_lessons': total_lessons,
