@@ -6,26 +6,41 @@
 {% block content %}
 <div class="certificate-page">
   <div class="cert-paper">
-    <div class="cert-logo">O</div>
+    <span class="cert-corner cc-tl" aria-hidden="true"></span>
+    <span class="cert-corner cc-tr" aria-hidden="true"></span>
+    <span class="cert-corner cc-bl" aria-hidden="true"></span>
+    <span class="cert-corner cc-br" aria-hidden="true"></span>
+
+    <div class="cert-seal" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+
     <div class="cert-eyebrow">Ochiq Kurs · Tugatish sertifikati</div>
     <h1 class="cert-h1">Tugatish guvohnomasi</h1>
+    <div class="cert-divider" aria-hidden="true"><i></i><span></span><i></i></div>
 
-    <p class="cert-body">Quyidagi shaxsga ushbu kursni muvaffaqiyatli tamomlagani uchun ushbu sertifikat taqdim etiladi:</p>
+    <p class="cert-body">Ushbu sertifikat quyidagi shaxsga tantanali ravishda taqdim etiladi:</p>
 
     <div class="cert-name">{{ full_name }}</div>
 
-    <p class="cert-body">
+    <p class="cert-body cert-course-line">
       <span class="cert-course-name">{{ course.title }}</span> kursini to'liq tamomlab,
-      barcha darslarni o'zlashtirgani uchun.
+      barcha darslarni muvaffaqiyatli o'zlashtirgani uchun.
     </p>
 
     <div class="cert-meta-row">
-      <div class="signature">
-        <div class="sig-line">Ochiq Kurs jamoasi</div>
+      <div class="cert-sig">
+        <div class="cert-sig-line"></div>
+        <div class="cert-sig-name">Ochiq Kurs jamoasi</div>
+        <div class="cert-sig-role">Imzo</div>
       </div>
-      <div class="verify">
-        <div class="code">#{{ certificate.code }}</div>
-        <div class="small">Berilgan sana: {{ certificate.issued_at|uz_date }}</div>
+      <div class="cert-rosette" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <span>Tasdiqlangan</span>
+      </div>
+      <div class="cert-verify">
+        <div class="cert-code">#{{ certificate.code }}</div>
+        <div class="cert-date">{{ certificate.issued_at|uz_date }}</div>
       </div>
     </div>
   </div>
