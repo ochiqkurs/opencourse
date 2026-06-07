@@ -19,9 +19,10 @@ INSTALLED_APPS = [
     # local
     'users.apps.UsersConfig',
     'learning.apps.LearningConfig',
-    # extensions
-    'django_extensions',
 ]
+
+if DEBUG:
+    INSTALLED_APPS.append('django_extensions')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
