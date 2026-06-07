@@ -26,8 +26,8 @@
       html += '<div class="ss-group">Kurslar</div>';
       courses.forEach(function (c) {
         html +=
-          '<a class="ss-item" href="' + c.url + '">' +
-            (c.thumb ? '<img class="ss-thumb" src="' + c.thumb + '" alt="">' : '<span class="ss-thumb"></span>') +
+          '<a class="ss-item" href="' + escapeHtml(c.url) + '">' +
+            (c.thumb ? '<img class="ss-thumb" src="' + escapeHtml(c.thumb) + '" alt="">' : '<span class="ss-thumb"></span>') +
             '<div>' +
               '<div>' + escapeHtml(c.title) + '</div>' +
               (c.category ? '<div class="ss-meta">' + escapeHtml(c.category) + '</div>' : '') +
@@ -39,7 +39,7 @@
       html += '<div class="ss-group">Darslar</div>';
       lessons.forEach(function (l) {
         html +=
-          '<a class="ss-item" href="' + l.url + '">' +
+          '<a class="ss-item" href="' + escapeHtml(l.url) + '">' +
             '<span class="ss-thumb"></span>' +
             '<div>' +
               '<div>' + escapeHtml(l.title) + '</div>' +

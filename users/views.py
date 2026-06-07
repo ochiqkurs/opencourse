@@ -97,13 +97,13 @@ def _get_or_create_telegram_user(telegram_id, first_name, last_name, username, p
             if username and not User.objects.filter(username=username).exists()
             else f'tg_{telegram_id}'
         )
-        user = User.objects.create(
+        user = User(
             username=chosen_username,
             first_name=first_name,
             last_name=last_name,
         )
         user.set_unusable_password()
-        user.save(update_fields=['username', 'first_name', 'last_name', 'password'])
+        user.save()
         profile = TelegramProfile(user=user, telegram_id=telegram_id)
         is_new_user = True
 
@@ -177,7 +177,7 @@ class TelegramLoginView(View):
         user = auth_token.user
         is_new_user = auth_token.is_new_user
         auth_token.delete()  # one-time use
-        login(request, user)
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         return redirect(self._post_login_url(request, is_new_user))
 
     def _handle_password(self, request):
@@ -188,7 +188,7 @@ class TelegramLoginView(View):
                 pwd_username=request.POST.get('username', ''),
             ))
         if form.is_valid():
-            login(request, form.cleaned_data['user'])
+            login(request, form.cleaned_data['user'], backend='django.contrib.auth.backends.ModelBackend')
             return redirect(self._post_login_url(request, is_new_user=False))
         # Surface the form's non-field error inline (bad credentials / passwordless account).
         errors = form.non_field_errors()
@@ -331,8 +331,9 @@ class CheckTokenView(View):
             return JsonResponse({'status': 'expired'})
 
         if auth_token.confirmed_at and auth_token.user:
-            login(request, auth_token.user)
+            login(request, auth_token.user, backend='django.contrib.auth.backends.ModelBackend')
             redirect_url = '/users/profile/' if auth_token.is_new_user else settings.LOGIN_REDIRECT_URL
+            auth_token.delete()
             return JsonResponse({'status': 'confirmed', 'redirect': redirect_url})
 
         return JsonResponse({'status': 'pending'})
@@ -521,7 +522,7 @@ class UsernamePasswordLoginView(View):
             form.add_error(None, "Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring.")
             return render(request, self.template_name, {'form': form, 'next': _safe_next(request)})
         if form.is_valid():
-            login(request, form.cleaned_data['user'])
+            login(request, form.cleaned_data['user'], backend='django.contrib.auth.backends.ModelBackend')
             return redirect(_safe_next(request) or settings.LOGIN_REDIRECT_URL)
         return render(request, self.template_name, {'form': form, 'next': _safe_next(request)})
 
@@ -615,8 +616,8 @@ class BulkCreateView(LoginRequiredMixin, View):
                         )
         except ValueError as exc:
             return JsonResponse({'success': False, 'error': str(exc)}, status=400)
-        except Exception as exc:
-            return JsonResponse({'success': False, 'error': f'Database error: {exc}'}, status=500)
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Ichki xatolik yuz berdi.'}, status=500)
 
         return JsonResponse({'success': True, 'course_id': course.pk})
 

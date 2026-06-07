@@ -31,7 +31,10 @@
         credentials: 'same-origin',
         body: JSON.stringify({ content: content }),
       })
-      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
       .then(function (data) {
         btnNote.disabled = false;
         if (data.status === 'ok') {

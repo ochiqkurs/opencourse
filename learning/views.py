@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Sum, Q, OuterRef, Subquery, IntegerField
 from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
@@ -76,17 +76,12 @@ class HomeView(View):
             featured = all_courses[:8]
 
         trending = sorted(all_courses, key=lambda c: (c.student_count or 0), reverse=True)[:8]
-        newest = list(
-            _course_card_annotations(
-                published.select_related('category')
-            ).order_by('-id')[:8]
-        )
-        top_rated = list(
-            _course_card_annotations(
-                published.filter(rating_count__gt=0)
-                .select_related('category')
-            ).order_by('-avg_rating', '-rating_count')[:8]
-        )
+        newest = sorted(all_courses, key=lambda c: c.id, reverse=True)[:8]
+        top_rated = sorted(
+            [c for c in all_courses if c.rating_count > 0],
+            key=lambda c: (float(c.avg_rating), c.rating_count),
+            reverse=True,
+        )[:8]
 
         total_seconds = (
             LessonView.objects
@@ -757,23 +752,24 @@ def _update_streak(user):
     from users.models import UserProfile
     today = _today_uzt()
 
-    profile, _ = UserProfile.objects.get_or_create(user=user)
+    with transaction.atomic():
+        profile, _ = UserProfile.objects.select_for_update().get_or_create(user=user)
 
-    if profile.last_activity_date == today:
-        return
+        if profile.last_activity_date == today:
+            return
 
-    if profile.last_activity_date is not None:
-        delta = today - profile.last_activity_date
-        if delta.days == 1:
-            profile.current_streak += 1
+        if profile.last_activity_date is not None:
+            delta = today - profile.last_activity_date
+            if delta.days == 1:
+                profile.current_streak += 1
+            else:
+                profile.current_streak = 1
         else:
             profile.current_streak = 1
-    else:
-        profile.current_streak = 1
 
-    profile.last_activity_date = today
-    profile.longest_streak = max(profile.longest_streak, profile.current_streak)
-    profile.save(update_fields=['current_streak', 'longest_streak', 'last_activity_date'])
+        profile.last_activity_date = today
+        profile.longest_streak = max(profile.longest_streak, profile.current_streak)
+        profile.save(update_fields=['current_streak', 'longest_streak', 'last_activity_date'])
 
 
 # ---------------------------------------------------------------------------
@@ -887,11 +883,15 @@ def toggle_wishlist(request, course_slug):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     course = get_object_or_404(Course, slug=course_slug)
-    qs = Wishlist.objects.filter(user=request.user, course=course)
-    if qs.exists():
-        qs.delete()
+    try:
+        Wishlist.objects.get(user=request.user, course=course).delete()
         return JsonResponse({'status': 'ok', 'wishlisted': False})
-    Wishlist.objects.create(user=request.user, course=course)
+    except Wishlist.DoesNotExist:
+        pass
+    try:
+        Wishlist.objects.create(user=request.user, course=course)
+    except IntegrityError:
+        return JsonResponse({'status': 'ok', 'wishlisted': True})
     return JsonResponse({'status': 'ok', 'wishlisted': True})
 
 
@@ -1013,13 +1013,15 @@ def leaderboard_view(request):
     )
 
     leaders = []
-    for i, r in enumerate(rows, start=1):
+    rank = 0
+    for r in rows:
         u = users.get(r['user_id'])
         if not u:
             continue
+        rank += 1
         prof = profiles.get(u.id)
         leaders.append({
-            'rank': i,
+            'rank': rank,
             'user': u,
             'views': r['views'],
             'completed': completed_counts.get(u.id, 0),
@@ -1358,17 +1360,30 @@ class LearningPathDetailView(View):
                 user=request.user, path=path_obj
             ).exists()
 
-        for pc in path_obj.path_courses.select_related('course').order_by('order'):
+        path_courses = list(path_obj.path_courses.select_related('course').order_by('order'))
+        course_ids = [pc.course_id for pc in path_courses]
+
+        lesson_counts = dict(
+            Lesson.objects.filter(module__course_id__in=course_ids)
+            .values_list('module__course_id')
+            .annotate(c=Count('id'))
+        )
+        done_counts = {}
+        if request.user.is_authenticated:
+            done_counts = dict(
+                LessonProgress.objects.filter(
+                    user=request.user,
+                    lesson__module__course_id__in=course_ids,
+                    is_completed=True,
+                ).values_list('lesson__module__course_id').annotate(c=Count('id'))
+            )
+
+        for pc in path_courses:
             course = pc.course
             total_courses += 1
-            total_lessons = Lesson.objects.filter(module__course=course).count()
-            done_lessons = 0
-            is_course_complete = False
-            if request.user.is_authenticated:
-                done_lessons = LessonProgress.objects.filter(
-                    user=request.user, lesson__module__course=course, is_completed=True
-                ).count()
-                is_course_complete = total_lessons > 0 and done_lessons >= total_lessons
+            total_lessons = lesson_counts.get(course.id, 0)
+            done_lessons = done_counts.get(course.id, 0)
+            is_course_complete = total_lessons > 0 and done_lessons >= total_lessons
             if is_course_complete:
                 completed_courses += 1
             courses_data.append({

@@ -45,11 +45,16 @@
         headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
         body: JSON.stringify({ timestamp: seconds, note: note }),
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
         .then(function (data) {
           if (data.status === 'ok') {
             noteForm.classList.add('hidden');
-            location.reload();  // simple reload to show new bookmark
+            location.reload();
+          } else {
+            saveBtn.disabled = false;
           }
         })
         .catch(function () { saveBtn.disabled = false; });
@@ -64,7 +69,10 @@
       fetch(url, {
         method: 'POST',
         headers: { 'X-CSRFToken': CSRF },
-      }).then(function (r) { return r.json(); })
+      }).then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
         .then(function () {
           var item = btn.closest('.bm-item');
           if (item) item.remove();
@@ -72,7 +80,8 @@
           if (list && !list.querySelector('.bm-item')) {
             list.innerHTML = '<li class="bm-empty">Hozircha xatcho\'plar yo\'q.</li>';
           }
-        });
+        })
+        .catch(function () {});
     });
   });
 

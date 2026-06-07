@@ -134,6 +134,7 @@
       </form>
     </div>
     <a href="{% url 'learning:course_list' %}">Barcha kurslar</a>
+    <a href="{% url 'learning:learning_path_list' %}">Yo'nalishlar</a>
     <a href="{% url 'learning:leaderboard' %}">Reyting</a>
     {% if user.is_authenticated %}
       <a href="{% url 'learning:my_learning' %}">Mening kurslarim</a>
@@ -238,11 +239,10 @@
           {% endif %}
         </div>
         <div class="footer-col">
-          <h4>Qo'llab-quvvatlash</h4>
-          <a href="#">Yordam markazi</a>
-          <a href="#">Aloqa</a>
-          <a href="#">Maxfiylik siyosati</a>
-          <a href="#">Foydalanish shartlari</a>
+          <h4>Platforma</h4>
+          <a href="{% url 'learning:course_list' %}">Barcha kurslar</a>
+          <a href="{% url 'learning:learning_path_list' %}">Yo'nalishlar</a>
+          <a href="{% url 'learning:leaderboard' %}">Reyting</a>
         </div>
       </div>
       <div class="footer-bottom">

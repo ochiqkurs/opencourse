@@ -36,7 +36,12 @@ class UserProfileForm(forms.ModelForm):
         }
 
     def clean_username(self):
-        value = self.cleaned_data['username'].strip()
+        value = self.cleaned_data['username'].strip().lower()
+        if not USERNAME_RE.match(value):
+            raise forms.ValidationError(
+                "Username 3–30 ta belgidan iborat bo'lib, faqat kichik harf, "
+                "raqam va pastki chiziq (_) ishlatishi mumkin."
+            )
         if User.objects.filter(username=value).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("Bu username band.")
         return value

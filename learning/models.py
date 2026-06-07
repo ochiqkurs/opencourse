@@ -1,4 +1,5 @@
 import secrets
+import django.core.validators
 from django.conf import settings
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -263,7 +264,12 @@ class Enrollment(models.Model):
 class CourseReview(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='course_reviews')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='reviews')
-    rating = models.PositiveSmallIntegerField()
+    rating = models.PositiveSmallIntegerField(
+        validators=[
+            django.core.validators.MinValueValidator(1),
+            django.core.validators.MaxValueValidator(5),
+        ],
+    )
     comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

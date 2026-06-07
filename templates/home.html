@@ -12,7 +12,7 @@
     <div class="announce-bar">
       <span class="ab-tag">E'lon</span>
       <strong>{{ a.title }}</strong>
-      <span class="ab-body">{{ a.body|truncatechars:140 }}</span>
+      <span class="ab-body">{{ a.body|striptags|truncatechars:140 }}</span>
     </div>
   {% endfor %}
 </div>

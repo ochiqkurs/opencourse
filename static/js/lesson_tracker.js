@@ -52,9 +52,13 @@
         method: 'POST',
         headers: { 'X-CSRFToken': CSRF },
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
         .then(function (data) {
           if (data && data.is_completed) window.location.reload();
+          else completeBtn.disabled = false;
         })
         .catch(function () { completeBtn.disabled = false; });
     });

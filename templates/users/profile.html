@@ -83,17 +83,17 @@
     <div class="continue-grid">
       {% for cp in in_progress_courses %}
       <div class="continue-card">
-        <a href="/malaka/{{ cp.course_slug }}/" class="cc-title">{{ cp.course_title }}</a>
+        <a href="{% url 'learning:course_detail' cp.course_slug %}" class="cc-title">{{ cp.course_title }}</a>
         <div class="cc-meta">{{ cp.completed_lessons }} / {{ cp.total_lessons }} dars · {{ cp.progress_percent }}%</div>
         <div class="progress-bar-track">
           <div class="progress-bar-fill" style="width: {{ cp.progress_percent }}%"></div>
         </div>
         {% if cp.next_lesson_slug %}
-          <a href="/malaka/{{ cp.course_slug }}/{{ cp.next_module_slug }}/{{ cp.next_lesson_slug }}/" class="btn btn-primary btn-sm">
+          <a href="{% url 'learning:lesson_detail' cp.course_slug cp.next_module_slug cp.next_lesson_slug %}" class="btn btn-primary btn-sm">
             Davom etish →
           </a>
         {% else %}
-          <a href="/malaka/{{ cp.course_slug }}/sertifikat/" class="btn btn-outline-primary btn-sm">
+          <a href="{% url 'learning:certificate' cp.course_slug %}" class="btn btn-outline-primary btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
             Sertifikat
           </a>

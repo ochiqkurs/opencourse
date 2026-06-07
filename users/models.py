@@ -51,16 +51,11 @@ class TelegramAuthToken(models.Model):
     def _generate_short_code(cls):
         """6-digit numeric code, unique among tokens issued within the last 10 minutes."""
         cutoff = timezone.now() - timedelta(minutes=10)
-        code = ''.join(secrets.choice('0123456789') for _ in range(6))
-        for _ in range(10):
-            clash = cls.objects.filter(
-                short_code=code,
-                created_at__gt=cutoff,
-            ).exists()
-            if not clash:
-                break
+        for _ in range(20):
             code = ''.join(secrets.choice('0123456789') for _ in range(6))
-        return code
+            if not cls.objects.filter(short_code=code, created_at__gt=cutoff).exists():
+                return code
+        raise RuntimeError('Failed to generate a unique short code after 20 attempts')
 
     @classmethod
     def generate(cls):
