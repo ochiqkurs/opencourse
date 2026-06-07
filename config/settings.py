@@ -19,6 +19,8 @@ INSTALLED_APPS = [
     # local
     'users.apps.UsersConfig',
     'learning.apps.LearningConfig',
+    # extensions
+    'django_extensions',
 ]
 
 MIDDLEWARE = [

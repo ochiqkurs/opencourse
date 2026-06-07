@@ -16,6 +16,7 @@ whitenoise = "*"
 pytz = "*"
 python-dotenv = "*"
 pillow = "*"
+django-extensions = "*"
 
 [dev-packages]
 
