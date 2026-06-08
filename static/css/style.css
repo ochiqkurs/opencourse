@@ -61,6 +61,7 @@ input, textarea, select { font-family: inherit; font-size: 1rem; }
 
   /* Accent — warm amber for rating/highlight */
   --accent-300: #FCD34D;
+  --accent-400: #FBBF24;
   --accent-500: #F59E0B;
   --accent-600: #D97706;
 
@@ -3466,4 +3467,19 @@ html[data-theme="dark"] .quiz-limit-warn { background: #422006; color: #fde68a; 
 html[data-theme="dark"] .cert-verify-badge { background: #064e3b; color: #6ee7b7; }
 html[data-theme="dark"] .quiz-card-icon { color: var(--brand-400); }
 html[data-theme="dark"] .bm-timestamp { background: var(--brand-900); color: var(--brand-300); }
+
+/* Dark-mode fixes — components that hardcode light (brand-50 / amber / rose / sky)
+   backgrounds need explicit overrides so they don't render as bright islands. */
+html[data-theme="dark"] .message.success { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.3); color: var(--brand-300); }
+html[data-theme="dark"] .badge-primary,
+html[data-theme="dark"] .badge-success { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.3); color: var(--brand-300); }
+html[data-theme="dark"] .badge-amber { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.3); color: #FCD34D; }
+html[data-theme="dark"] .badge-rose  { background: rgba(244,63,94,.12);  border-color: rgba(244,63,94,.3);  color: #FDA4AF; }
+html[data-theme="dark"] .badge-sky   { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.3); color: #93C5FD; }
+html[data-theme="dark"] .completed-badge { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.3); color: var(--brand-300); }
+html[data-theme="dark"] .qa-resolved { background: rgba(16,185,129,.12); color: var(--brand-300); }
+html[data-theme="dark"] .qq-choice:hover { background: rgba(16,185,129,.10); }
+html[data-theme="dark"] .qq-choice.qq-selected { background: rgba(16,185,129,.14); }
+html[data-theme="dark"] .qq-explanation { background: rgba(16,185,129,.10); }
+html[data-theme="dark"] .certificate-page { background: var(--bg-soft); }
 
