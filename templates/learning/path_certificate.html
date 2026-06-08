@@ -5,34 +5,52 @@
 
 {% block content %}
 <div class="certificate-page">
-  <div class="cert-card">
-    <div class="cert-header">
-      <div class="cert-logo">Ochiq Kurs</div>
-      <div class="cert-title">Yo'nalish sertifikati</div>
+  <div class="cert-paper">
+    <span class="cert-corner cc-tl" aria-hidden="true"></span>
+    <span class="cert-corner cc-tr" aria-hidden="true"></span>
+    <span class="cert-corner cc-bl" aria-hidden="true"></span>
+    <span class="cert-corner cc-br" aria-hidden="true"></span>
+
+    <div class="cert-seal" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </div>
 
-    <div class="cert-body">
-      <p class="cert-to">Quyidagi shaxsga taqdim etiladi:</p>
-      <h2 class="cert-name">{{ full_name }}</h2>
-      <p class="cert-for">
-        <strong>{{ path_obj.title }}</strong> yo'nalishidagi barcha kurslarni muvaffaqiyatli tamomlagani uchun.
-      </p>
-    </div>
+    <div class="cert-eyebrow">Ochiq Kurs · Yo'nalish sertifikati</div>
+    <h1 class="cert-h1">Yo'nalish guvohnomasi</h1>
+    <div class="cert-divider" aria-hidden="true"><i></i><span></span><i></i></div>
 
-    <div class="cert-footer">
-      <div class="cert-code">
-        <span class="cert-code-label">Sertifikat kodi:</span>
-        <span class="cert-code-value">{{ certificate.code }}</span>
+    <p class="cert-body">Ushbu sertifikat quyidagi shaxsga tantanali ravishda taqdim etiladi:</p>
+
+    <div class="cert-name">{{ full_name }}</div>
+
+    <p class="cert-body cert-course-line">
+      <span class="cert-course-name">{{ path_obj.title }}</span> yo'nalishidagi barcha kurslarni
+      muvaffaqiyatli tamomlagani uchun.
+    </p>
+
+    <div class="cert-meta-row">
+      <div class="cert-sig">
+        <div class="cert-sig-line"></div>
+        <div class="cert-sig-name">Ochiq Kurs jamoasi</div>
+        <div class="cert-sig-role">Imzo</div>
       </div>
-      <div class="cert-date">
-        Berilgan sana: {{ certificate.issued_at|uz_date }}
+      <div class="cert-rosette" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <span>Tasdiqlangan</span>
+      </div>
+      <div class="cert-verify">
+        <div class="cert-code">#{{ certificate.code }}</div>
+        <div class="cert-date">{{ certificate.issued_at|uz_date }}</div>
       </div>
     </div>
   </div>
 
   <div class="cert-actions">
-    <button class="btn btn-primary" onclick="window.print()">Chop etish</button>
-    <a href="{% url 'learning:learning_path_detail' path_obj.slug %}" class="btn btn-secondary">Yo'nalishga qaytish</a>
+    <button class="btn btn-primary" onclick="window.print()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+      Chop etish
+    </button>
+    <a href="{% url 'learning:learning_path_detail' path_obj.slug %}" class="btn btn-ghost">Yo'nalishga qaytish</a>
   </div>
 </div>
 {% endblock %}

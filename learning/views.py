@@ -93,7 +93,9 @@ class HomeView(View):
         total_courses = published.count()
 
         categories = list(
-            Category.objects.annotate(c=Count('courses')).order_by('order', 'name')
+            Category.objects.annotate(
+                c=Count('courses', filter=Q(courses__status='published'))
+            ).order_by('order', 'name')
         )
 
         latest_reviews = list(
@@ -1129,14 +1131,15 @@ def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
     best_attempt = None
     attempts_remaining = -1
     if request.user.is_authenticated:
-        past_attempts = list(
-            QuizAttempt.objects.filter(user=request.user, quiz=quiz)
-            .order_by('-started_at')[:10]
-        )
+        user_attempts = QuizAttempt.objects.filter(user=request.user, quiz=quiz).order_by('-started_at')
+        total_attempts = user_attempts.count()
+        past_attempts = list(user_attempts[:10])
         if past_attempts:
             best_attempt = max(past_attempts, key=lambda a: a.percentage())
         if quiz.max_attempts > 0:
-            attempts_remaining = quiz.max_attempts - len(past_attempts)
+            # Clamp on the true attempt count, not the sliced (max 10) preview list,
+            # so the displayed remaining count stays correct and never goes negative.
+            attempts_remaining = max(quiz.max_attempts - total_attempts, 0)
     return render(request, 'learning/quiz_detail.html', {
         'course': lesson.module.course,
         'module': lesson.module,

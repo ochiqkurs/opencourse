@@ -7,7 +7,7 @@
           <img src="{{ thumb_url }}" alt="{{ course.title }}" loading="lazy">
         {% else %}
           <div class="course-card-thumb-placeholder">
-            <span>{{ course.title|truncatechars:1 }}</span>
+            <span>{{ course.title|slice:":1"|upper }}</span>
           </div>
         {% endif %}
       {% endwith %}
