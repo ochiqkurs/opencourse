@@ -156,6 +156,7 @@ python manage.py shell                 # Django REPL
 python manage.py fill_durations        # populate lesson durations from YouTube API
 python manage.py createcachetable      # provision the DB cache table (rate limiter)
 python manage.py clear_expired_tokens  # delete TelegramAuthToken rows past their 10-min TTL
+python manage.py graph_models -a -g -o models_graph.png  # regenerate models_graph.png (requires DEBUG=True for django_extensions)
 ```
 
 ### No Test Suite
