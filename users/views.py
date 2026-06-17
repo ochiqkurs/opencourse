@@ -1,3 +1,4 @@
+import hmac
 import json
 import random
 import re
@@ -33,12 +34,21 @@ from .models import TelegramAuthToken, TelegramProfile
 
 
 def _client_ip(request):
-    """Best-effort real client IP.
+    """Best-effort real client IP for rate limiting.
 
-    Behind a single proxy (nginx sets `X-Forwarded-For: <client-supplied>, <real>`),
-    the last entry is the address the proxy observed and is the only one a remote
-    client cannot spoof. Fall back to REMOTE_ADDR when there is no XFF header.
+    Production sits behind Cloudflare → nginx → gunicorn. Cloudflare sets
+    `CF-Connecting-IP` to the true client address and overwrites any client-supplied
+    value, so it's the one header a remote client cannot spoof. Prefer it.
+
+    Without Cloudflare (e.g. nginx alone), nginx's `$proxy_add_x_forwarded_for`
+    appends the peer it observed as the *last* XFF entry, so that's the safe one to
+    trust there. (Behind Cloudflare the last entry is the Cloudflare edge IP — shared
+    by many users — which would collapse everyone into one rate-limit bucket, hence
+    CF-Connecting-IP takes precedence.) Fall back to REMOTE_ADDR.
     """
+    cf_ip = request.META.get('HTTP_CF_CONNECTING_IP', '').strip()
+    if cf_ip:
+        return cf_ip
     xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
     if xff:
         return xff.split(',')[-1].strip()
@@ -234,7 +244,7 @@ class TelegramConfirmView(View):
 
     def post(self, request):
         secret = request.headers.get('X-Bot-Secret', '')
-        if secret != settings.BOT_SECRET:
+        if not hmac.compare_digest(secret, settings.BOT_SECRET):
             return JsonResponse({'error': 'Forbidden'}, status=403)
 
         try:
@@ -285,7 +295,7 @@ class IssueCodeView(View):
 
     def post(self, request):
         secret = request.headers.get('X-Bot-Secret', '')
-        if secret != settings.BOT_SECRET:
+        if not hmac.compare_digest(secret, settings.BOT_SECRET):
             return JsonResponse({'error': 'Forbidden'}, status=403)
 
         try:
@@ -400,15 +410,21 @@ class ProfileView(LoginRequiredMixin, View):
             if lp.is_completed:
                 course_data[cid]['completed_ids'].add(lp.lesson_id)
 
+        # Fetch lessons for every in-progress course in one query and group them,
+        # rather than issuing a per-course query inside the loop (an N+1).
+        lessons_by_course = {}
+        for lsn in (
+            Lesson.objects
+            .filter(module__course_id__in=course_data.keys())
+            .select_related('module')
+            .order_by('module__order', 'order')
+        ):
+            lessons_by_course.setdefault(lsn.module.course_id, []).append(lsn)
+
         in_progress_courses = []
         for cid, data in course_data.items():
             course = data['course']
-            lessons = list(
-                Lesson.objects
-                .filter(module__course=course)
-                .select_related('module')
-                .order_by('module__order', 'order')
-            )
+            lessons = lessons_by_course.get(cid, [])
             total_lessons = len(lessons)
             completed_ids = data['completed_ids']
             completed_lessons = len(completed_ids)

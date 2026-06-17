@@ -26,6 +26,7 @@ jobs:
             pip install -r requirements.txt --quiet
             python manage.py migrate --noinput
             python manage.py createcachetable
+            python manage.py clear_expired_tokens
             python manage.py collectstatic --noinput
             sudo systemctl restart gunicorn-ochiqkurs
 

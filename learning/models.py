@@ -94,6 +94,17 @@ class Course(models.Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        # Stamp published_at the first time a course goes live so the
+        # ('status', '-published_at') index can order by recency. Cleared again if
+        # it leaves the published state.
+        if self.status == 'published' and self.published_at is None:
+            from django.utils import timezone
+            self.published_at = timezone.now()
+        elif self.status != 'published':
+            self.published_at = None
+        super().save(*args, **kwargs)
+
     def get_thumbnail_url(self):
         """Return manual thumbnail if uploaded, else first lesson's YouTube thumbnail."""
         if self.thumbnail:

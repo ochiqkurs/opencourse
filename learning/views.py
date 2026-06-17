@@ -135,11 +135,18 @@ class HomeView(View):
             )
             enrolled_courses = [c for c in all_courses if c.id in enrolled_ids]
 
+            # Completed-lesson counts for every enrolled course in one query
+            # (was a per-course COUNT inside the loop — an N+1).
+            completed_map = dict(
+                LessonProgress.objects
+                .filter(user=user, is_completed=True, lesson__module__course_id__in=enrolled_ids)
+                .values_list('lesson__module__course_id')
+                .annotate(c=Count('id'))
+            )
+
             for course in enrolled_courses:
                 total = course.lesson_count or 0
-                done = LessonProgress.objects.filter(
-                    user=user, lesson__module__course_id=course.id, is_completed=True
-                ).count()
+                done = completed_map.get(course.id, 0)
                 percent = int(done / total * 100) if total else 0
                 if 0 < percent < 100:
                     continue_learning.append({
@@ -410,9 +417,9 @@ class CourseDetailView(View):
         overall_percent = int(total_completed / total_lessons * 100) if total_lessons else 0
         is_complete = total_lessons > 0 and total_completed == total_lessons
 
-        if is_complete and request.user.is_authenticated and not has_certificate:
-            Certificate.objects.get_or_create(user=request.user, course=course)
-            has_certificate = True
+        # Certificates are issued by the completion endpoints (mark_complete /
+        # record_view / quiz) and by the explicit /sertifikat/ view — not as a
+        # side effect of viewing this page (a GET must stay side-effect free).
 
         reviews = list(
             course.reviews.select_related('user', 'user__telegram_profile')
@@ -524,7 +531,7 @@ class LessonDetailView(View):
                 user=request.user, lesson=lesson
             ).first()
             note = Note.objects.filter(user=request.user, lesson=lesson).first()
-            Enrollment.objects.get_or_create(user=request.user, course=course)
+            # Enrollment now happens on first play (see record_view), not on a GET.
             is_wishlisted = Wishlist.objects.filter(user=request.user, course=course).exists()
         else:
             progress = None
@@ -670,7 +677,7 @@ class LessonDetailView(View):
 
 
 # ---------------------------------------------------------------------------
-# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/davom/koridi/
+# POST /malaka/<course_slug>/<module_slug>/<lesson_slug>/davom/korildi/
 # ---------------------------------------------------------------------------
 
 @login_required
@@ -683,8 +690,12 @@ def record_view(request, course_slug, module_slug, lesson_slug):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     today = _today_uzt()
+
+    # Enroll on first play (the previous implicit enrollment happened on a GET of
+    # the lesson page, which inflated enrollments for anyone who merely opened it).
+    Enrollment.objects.get_or_create(user=request.user, course=lesson.module.course)
 
     _, created = LessonView.objects.get_or_create(
         user=request.user, lesson=lesson, viewed_on=today,
@@ -721,7 +732,7 @@ def mark_lesson_complete(request, course_slug, module_slug, lesson_slug):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
 
     progress, _ = LessonProgress.objects.get_or_create(
         user=request.user, lesson=lesson
@@ -783,7 +794,7 @@ def save_note(request, course_slug, module_slug, lesson_slug):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
 
     try:
         content = json.loads(request.body).get('content', '')
@@ -858,8 +869,16 @@ def certificate_view(request, course_slug):
     })
 
 
-def _get_lesson(course_slug, module_slug, lesson_slug):
+def _get_lesson(course_slug, module_slug, lesson_slug, user=None):
+    """Resolve a lesson, 404ing on draft/archived courses for non-staff.
+
+    Mutating endpoints (complete, note, bookmark, quiz, Q&A) call this so that an
+    authenticated user cannot record progress / certificates against unpublished
+    content by POSTing directly to its URLs.
+    """
     course = get_object_or_404(Course, slug=course_slug)
+    if course.status != 'published' and not (user and (user.is_staff or user.is_superuser)):
+        raise Http404
     module = get_object_or_404(Module, slug=module_slug, course=course)
     return get_object_or_404(Lesson, slug=lesson_slug, module=module)
 
@@ -1045,7 +1064,7 @@ def leaderboard_view(request):
 def ask_question(request, course_slug, module_slug, lesson_slug):
     if request.method != 'POST':
         return redirect('learning:lesson_detail', course_slug, module_slug, lesson_slug)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     form = LessonQuestionForm(request.POST)
     if form.is_valid():
         q = form.save(commit=False)
@@ -1064,7 +1083,7 @@ def ask_question(request, course_slug, module_slug, lesson_slug):
 def post_answer(request, course_slug, module_slug, lesson_slug, question_id):
     if request.method != 'POST':
         return redirect('learning:lesson_detail', course_slug, module_slug, lesson_slug)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     question = get_object_or_404(LessonQuestion, id=question_id, lesson=lesson)
     form = LessonAnswerForm(request.POST)
     if form.is_valid():
@@ -1086,7 +1105,7 @@ def post_answer(request, course_slug, module_slug, lesson_slug, question_id):
 def save_bookmark(request, course_slug, module_slug, lesson_slug):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
@@ -1113,7 +1132,7 @@ def save_bookmark(request, course_slug, module_slug, lesson_slug):
 def delete_bookmark(request, course_slug, module_slug, lesson_slug, bookmark_id):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     bookmark = get_object_or_404(VideoBookmark, id=bookmark_id, user=request.user, lesson=lesson)
     bookmark.delete()
     return JsonResponse({'status': 'ok'})
@@ -1124,7 +1143,7 @@ def delete_bookmark(request, course_slug, module_slug, lesson_slug, bookmark_id)
 # ---------------------------------------------------------------------------
 
 def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
     questions_count = quiz.questions.count()
     past_attempts = []
@@ -1156,17 +1175,23 @@ def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
 def start_quiz(request, course_slug, module_slug, lesson_slug, quiz_id):
     if request.method != 'POST':
         return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
-    past_count = QuizAttempt.objects.filter(user=request.user, quiz=quiz).count()
-    if quiz.max_attempts > 0 and past_count >= quiz.max_attempts:
-        messages.error(request, "Ushbu test uchun maksimal urinishlar soniga yetdingiz.")
-        return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
-    QuizAttempt.objects.create(
-        user=request.user,
-        quiz=quiz,
-        max_score=quiz.questions.count(),
-    )
+    # Reuse an existing in-progress attempt instead of spawning a new one on every
+    # POST (double-clicking "Boshlash" used to leave orphaned attempts behind).
+    in_progress = QuizAttempt.objects.filter(
+        user=request.user, quiz=quiz, completed_at__isnull=True
+    ).first()
+    if in_progress is None:
+        past_count = QuizAttempt.objects.filter(user=request.user, quiz=quiz).count()
+        if quiz.max_attempts > 0 and past_count >= quiz.max_attempts:
+            messages.error(request, "Ushbu test uchun maksimal urinishlar soniga yetdingiz.")
+            return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
+        QuizAttempt.objects.create(
+            user=request.user,
+            quiz=quiz,
+            max_score=quiz.questions.count(),
+        )
     # The quiz is taken inline on the lesson page; the lesson view detects the
     # in-progress attempt and renders the questions where the video would be.
     return redirect('learning:lesson_detail', course_slug, module_slug, lesson_slug)
@@ -1197,7 +1222,7 @@ def check_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, a
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
     attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
     if attempt.completed_at:
@@ -1259,7 +1284,7 @@ def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, 
     """Grade a whole quiz from one JSON payload (legacy all-at-once submission)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
     attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
     if attempt.completed_at:
@@ -1300,7 +1325,7 @@ def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, 
 
 @login_required
 def quiz_result(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug)
+    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
     attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
     answers_detail = list(
