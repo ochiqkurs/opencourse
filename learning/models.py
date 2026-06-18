@@ -420,7 +420,8 @@ class Quiz(models.Model):
 
 class QuizQuestion(models.Model):
     QUESTION_TYPE_CHOICES = [
-        ('multiple_choice', "Ko'p tanlovli"),
+        ('multiple_choice', "Bitta to'g'ri javobli (radio)"),
+        ('multi_select', "Bir nechta to'g'ri javobli (checkbox)"),
         ('true_false', "To'g'ri/Noto'g'ri"),
     ]
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='questions')
@@ -474,7 +475,10 @@ class QuizAttempt(models.Model):
 class QuizAnswer(models.Model):
     attempt = models.ForeignKey(QuizAttempt, on_delete=models.CASCADE, related_name='answers')
     question = models.ForeignKey(QuizQuestion, on_delete=models.CASCADE)
+    # Single-choice / true_false answers use selected_choice; multi_select answers
+    # use selected_choices (the M2M). is_correct is the graded verdict either way.
     selected_choice = models.ForeignKey(QuizChoice, on_delete=models.CASCADE, null=True, blank=True)
+    selected_choices = models.ManyToManyField(QuizChoice, blank=True, related_name='+')
     is_correct = models.BooleanField(default=False)
 
     class Meta:

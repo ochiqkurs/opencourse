@@ -1236,21 +1236,39 @@ def check_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, a
     except (QuizQuestion.DoesNotExist, ValueError, TypeError):
         return JsonResponse({'error': 'Invalid question'}, status=400)
 
+    correct_ids = set(question.choices.filter(is_correct=True).values_list('id', flat=True))
     selected_choice = None
+    selected_objs = []
     is_correct = False
-    choice_id = data.get('choice_id')
-    if choice_id is not None:
-        try:
-            selected_choice = question.choices.get(id=int(choice_id))
-            is_correct = selected_choice.is_correct
-        except (QuizChoice.DoesNotExist, ValueError, TypeError):
-            return JsonResponse({'error': 'Invalid choice'}, status=400)
 
-    QuizAnswer.objects.update_or_create(
+    if question.question_type == 'multi_select':
+        raw = data.get('choice_ids')
+        if raw is None:
+            return JsonResponse({'error': 'Invalid choice'}, status=400)
+        try:
+            sel_ids = {int(x) for x in raw}
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid choice'}, status=400)
+        selected_objs = list(question.choices.filter(id__in=sel_ids))
+        if len(selected_objs) != len(sel_ids):
+            return JsonResponse({'error': 'Invalid choice'}, status=400)
+        # Correct only if the selected set EXACTLY matches the correct set.
+        is_correct = bool(sel_ids) and sel_ids == correct_ids
+    else:
+        choice_id = data.get('choice_id')
+        if choice_id is not None:
+            try:
+                selected_choice = question.choices.get(id=int(choice_id))
+                is_correct = selected_choice.is_correct
+            except (QuizChoice.DoesNotExist, ValueError, TypeError):
+                return JsonResponse({'error': 'Invalid choice'}, status=400)
+
+    answer, _ = QuizAnswer.objects.update_or_create(
         attempt=attempt,
         question=question,
         defaults={'selected_choice': selected_choice, 'is_correct': is_correct},
     )
+    answer.selected_choices.set(selected_objs)  # empty for single/true_false
 
     correct_choice = question.choices.filter(is_correct=True).first()
     total = quiz.questions.count()
@@ -1269,6 +1287,7 @@ def check_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, a
     return JsonResponse({
         'is_correct': is_correct,
         'correct_choice_id': correct_choice.id if correct_choice else None,
+        'correct_choice_ids': sorted(correct_ids),
         'explanation': question.explanation,
         'answered': answered,
         'total': total,
@@ -1296,21 +1315,34 @@ def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, 
     answers = data.get('answers', {})
     attempt.answers.all().delete()
     for q_data in quiz.questions.prefetch_related('choices').all():
-        selected_id = answers.get(str(q_data.id))
+        val = answers.get(str(q_data.id))
         selected_choice = None
+        selected_objs = []
         is_correct = False
-        if selected_id:
+        if q_data.question_type == 'multi_select' and isinstance(val, list):
+            sel_ids = set()
+            for x in val:
+                try:
+                    sel_ids.add(int(x))
+                except (ValueError, TypeError):
+                    pass
+            selected_objs = list(q_data.choices.filter(id__in=sel_ids))
+            correct_ids = set(q_data.choices.filter(is_correct=True).values_list('id', flat=True))
+            is_correct = bool(sel_ids) and sel_ids == correct_ids
+        elif val:
             try:
-                selected_choice = q_data.choices.get(id=int(selected_id))
+                selected_choice = q_data.choices.get(id=int(val))
                 is_correct = selected_choice.is_correct
-            except (QuizChoice.DoesNotExist, ValueError):
+            except (QuizChoice.DoesNotExist, ValueError, TypeError):
                 pass
-        QuizAnswer.objects.create(
+        answer = QuizAnswer.objects.create(
             attempt=attempt,
             question=q_data,
             selected_choice=selected_choice,
             is_correct=is_correct,
         )
+        if selected_objs:
+            answer.selected_choices.set(selected_objs)
     _finalize_quiz_attempt(attempt, request.user, lesson)
 
     return JsonResponse({
@@ -1330,7 +1362,15 @@ def quiz_result(request, course_slug, module_slug, lesson_slug, quiz_id, attempt
     attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
     answers_detail = list(
         attempt.answers.select_related('question', 'selected_choice')
+        .prefetch_related('selected_choices', 'question__choices')
     )
+    # Unify single- and multi-select into one set of picked choice ids per answer
+    # so the template can highlight "your answer" uniformly.
+    for a in answers_detail:
+        ids = {c.id for c in a.selected_choices.all()}
+        if a.selected_choice_id:
+            ids.add(a.selected_choice_id)
+        a.selected_ids = ids
     course = lesson.module.course
     return render(request, 'learning/quiz_result.html', {
         'course': course,

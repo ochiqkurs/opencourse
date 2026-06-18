@@ -76,3 +76,50 @@ class ProgressIntegrityTests(TestCase):
         resp = self.client.get(reverse('learning:course_detail', args=[course.slug]))
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Certificate.objects.filter(user=self.user, course=course).exists())
+
+
+import json
+from .models import Quiz, QuizQuestion, QuizChoice, QuizAttempt
+
+
+@override_settings(STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class MultiSelectQuizTests(TestCase):
+    """Grading for multi_select questions: correct only on EXACT set match."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='quizzer', password='pw-12345!x')
+        self.client.force_login(self.user)
+        self.course = Course.objects.create(title='Q', slug='q', status='published')
+        self.module = Module.objects.create(title='M', slug='m', course=self.course, order=0)
+        self.lesson = Lesson.objects.create(title='Test', slug='t', module=self.module,
+                                            lesson_type='quiz', order=0)
+        self.quiz = Quiz.objects.create(lesson=self.lesson, title='T', pass_percent=50)
+        self.q = QuizQuestion.objects.create(quiz=self.quiz, question_type='multi_select',
+                                             text='Qaysilar to\'g\'ri?', order=1)
+        self.c1 = QuizChoice.objects.create(question=self.q, text='A', is_correct=True, order=1)
+        self.c2 = QuizChoice.objects.create(question=self.q, text='B', is_correct=True, order=2)
+        self.c3 = QuizChoice.objects.create(question=self.q, text='C', is_correct=False, order=3)
+
+    def _check(self, choice_ids):
+        attempt = QuizAttempt.objects.create(user=self.user, quiz=self.quiz, max_score=1)
+        url = reverse('learning:check_quiz_answer', args=[
+            self.course.slug, self.module.slug, self.lesson.slug, self.quiz.id, attempt.id])
+        resp = self.client.post(url, data=json.dumps({'question_id': self.q.id, 'choice_ids': choice_ids}),
+                                content_type='application/json')
+        return resp.json()
+
+    def test_exact_match_is_correct(self):
+        self.assertTrue(self._check([self.c1.id, self.c2.id])['is_correct'])
+
+    def test_partial_selection_is_wrong(self):
+        self.assertFalse(self._check([self.c1.id])['is_correct'])
+
+    def test_superset_selection_is_wrong(self):
+        self.assertFalse(self._check([self.c1.id, self.c2.id, self.c3.id])['is_correct'])
+
+    def test_correct_choice_ids_returned(self):
+        data = self._check([self.c1.id])
+        self.assertEqual(set(data['correct_choice_ids']), {self.c1.id, self.c2.id})

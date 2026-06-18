@@ -48,11 +48,11 @@
         {% for c in ans.question.choices.all %}
         <div class="qr-q-choice
           {% if c.is_correct %}qr-choice-correct{% endif %}
-          {% if c.id == ans.selected_choice_id and not ans.is_correct %}qr-choice-selected-wrong{% endif %}
-          {% if c.id == ans.selected_choice_id and ans.is_correct %}qr-choice-selected{% endif %}">
+          {% if c.id in ans.selected_ids and not ans.is_correct %}qr-choice-selected-wrong{% endif %}
+          {% if c.id in ans.selected_ids and ans.is_correct %}qr-choice-selected{% endif %}">
           {{ c.text }}
           {% if c.is_correct %}<span class="qr-correct-mark">✓</span>{% endif %}
-          {% if c.id == ans.selected_choice_id and not ans.is_correct %}<span class="qr-wrong-mark">Sizning javobingiz</span>{% endif %}
+          {% if c.id in ans.selected_ids and not c.is_correct %}<span class="qr-wrong-mark">Sizning tanlovingiz</span>{% endif %}
         </div>
         {% endfor %}
       </div>

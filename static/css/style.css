@@ -3202,8 +3202,20 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 }
 .qq-label { font-size: 0.95rem; }
 
+/* Multi-select (checkbox) variant: hide native box, square indicator + hint */
+.qq-choice input[type="checkbox"] {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.qq-choice:has(input[type="checkbox"]:focus-visible) {
+  outline: 2px solid var(--brand-500); outline-offset: 2px; border-radius: var(--r-sm);
+}
+.qq-choice--multi .qq-radio { border-radius: 5px; }
+.qq-hint { font-size: 0.85rem; color: var(--muted); margin: -4px 0 12px; }
+
 /* Graded answer states (one-question-at-a-time flow) */
-.qq-choice input[type="radio"]:disabled { cursor: default; }
+.qq-choice input[type="radio"]:disabled,
+.qq-choice input[type="checkbox"]:disabled { cursor: default; }
 .qq-choice.qq-correct {
   border-color: var(--success);
   background: color-mix(in srgb, var(--success) 12%, transparent);
