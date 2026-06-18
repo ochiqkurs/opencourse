@@ -49,10 +49,13 @@
           {% for q in active_questions %}
           <div class="quiz-question-block" data-qid="{{ q.id }}" data-type="{{ q.question_type }}" hidden>
             <div class="qq-text">{{ q.text }}</div>
+            {% if q.question_type == 'multi_select' %}
+            <div class="qq-hint">Bir nechta to'g'ri javob bo'lishi mumkin — barchasini tanlang.</div>
+            {% endif %}
             <div class="qq-choices">
               {% for c in q.choices.all %}
-              <label class="qq-choice" data-cid="{{ c.id }}">
-                <input type="radio" name="q_{{ q.id }}" value="{{ c.id }}">
+              <label class="qq-choice{% if q.question_type == 'multi_select' %} qq-choice--multi{% endif %}" data-cid="{{ c.id }}">
+                <input type="{% if q.question_type == 'multi_select' %}checkbox{% else %}radio{% endif %}" name="q_{{ q.id }}" value="{{ c.id }}">
                 <span class="qq-radio"></span>
                 <span class="qq-label">{{ c.text }}</span>
                 <span class="qq-mark" aria-hidden="true"></span>
@@ -524,7 +527,10 @@
   var mode = 'check';       // 'check' grades; 'next' advances / shows result
   var finalResult = null;   // populated once the attempt is finished
 
-  function selectedRadio(block) { return block.querySelector('input[type="radio"]:checked'); }
+  function checkedInputs(block) {
+    return Array.prototype.slice.call(block.querySelectorAll('input:checked'));
+  }
+  function isMulti(block) { return block.dataset.type === 'multi_select'; }
 
   function showQuestion(i) {
     blocks.forEach(function (b, bi) { b.hidden = (bi !== i); });
@@ -532,19 +538,21 @@
     fill.style.width = (i / total * 100) + '%';
     mode = 'check';
     btn.textContent = 'Javobni tekshirish';
-    btn.disabled = !selectedRadio(blocks[i]);
+    btn.disabled = checkedInputs(blocks[i]).length === 0;
     statusEl.textContent = '';
   }
 
-  function lockChoices(block, correctId) {
-    var picked = selectedRadio(block);
-    var pickedId = picked ? picked.value : null;
-    block.querySelectorAll('input[type="radio"]').forEach(function (r) { r.disabled = true; });
+  function lockChoices(block, correctIds) {
+    var correct = {};
+    (correctIds || []).forEach(function (id) { correct[String(id)] = true; });
+    var pickedIds = {};
+    checkedInputs(block).forEach(function (inp) { pickedIds[String(inp.value)] = true; });
+    block.querySelectorAll('input').forEach(function (r) { r.disabled = true; });
     block.querySelectorAll('.qq-choice').forEach(function (choice) {
-      var cid = choice.dataset.cid;
-      if (String(cid) === String(correctId)) {
+      var cid = String(choice.dataset.cid);
+      if (correct[cid]) {
         choice.classList.add('qq-correct');
-      } else if (cid === pickedId) {
+      } else if (pickedIds[cid]) {
         choice.classList.add('qq-wrong');
       }
     });
@@ -567,31 +575,42 @@
   blocks.forEach(function (block) {
     block.addEventListener('change', function (e) {
       if (mode !== 'check') { return; }
-      if (e.target && e.target.type === 'radio') {
+      if (!e.target || (e.target.type !== 'radio' && e.target.type !== 'checkbox')) { return; }
+      if (e.target.type === 'radio') {
         block.querySelectorAll('.qq-choice').forEach(function (c) { c.classList.remove('qq-selected'); });
         e.target.closest('.qq-choice').classList.add('qq-selected');
-        btn.disabled = false;
+      } else {
+        e.target.closest('.qq-choice').classList.toggle('qq-selected', e.target.checked);
       }
+      btn.disabled = checkedInputs(block).length === 0;
     });
   });
 
   function gradeCurrent() {
     var block = blocks[index];
-    var picked = selectedRadio(block);
-    if (!picked) { return; }
+    var picked = checkedInputs(block);
+    if (!picked.length) { return; }
     btn.disabled = true;
     btn.textContent = 'Tekshirilmoqda...';
     statusEl.textContent = '';
 
+    var payload = { question_id: block.dataset.qid };
+    if (isMulti(block)) {
+      payload.choice_ids = picked.map(function (i) { return i.value; });
+    } else {
+      payload.choice_id = picked[0].value;
+    }
+
     fetch(checkUrl, {
       method: 'POST',
       headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question_id: block.dataset.qid, choice_id: picked.value }),
+      body: JSON.stringify(payload),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (typeof data.is_correct === 'undefined') { throw new Error('bad response'); }
-        lockChoices(block, data.correct_choice_id);
+        var correctIds = data.correct_choice_ids || (data.correct_choice_id ? [data.correct_choice_id] : []);
+        lockChoices(block, correctIds);
         if (data.explanation) {
           var ex = block.querySelector('.qq-explanation');
           ex.textContent = data.explanation;
