@@ -133,3 +133,229 @@ class MultiSelectQuizTests(TestCase):
     def test_correct_choice_ids_returned(self):
         data = self._check([self.c1.id])
         self.assertEqual(set(data['correct_choice_ids']), {self.c1.id, self.c2.id})
+
+
+# ═══════════════════════════════════════════════════════════════
+# Auth flows (Telegram confirm / issue-code / code login / poll)
+# ═══════════════════════════════════════════════════════════════
+import json as _json
+from datetime import timedelta as _td
+from django.contrib.auth.models import User as _User
+from django.core.cache import cache as _cache
+from django.utils import timezone as _tz
+from users.models import TelegramAuthToken, TelegramProfile, UserProfile
+from learning.views import _update_streak, _maybe_issue_certificate, _today_uzt
+
+# Use a known bot secret, an in-memory cache (the prod DB cache table is not
+# created in the test DB), and the plain static backend (no manifest in tests).
+_AUTH_OVERRIDES = dict(
+    BOT_SECRET='test-bot-secret',
+    CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}},
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+
+
+@override_settings(**_AUTH_OVERRIDES)
+class TelegramConfirmTests(TestCase):
+    URL = '/api/auth/confirm/'
+
+    def setUp(self):
+        _cache.clear()
+
+    def _post(self, body, secret='test-bot-secret'):
+        return self.client.post(self.URL, data=_json.dumps(body),
+                                content_type='application/json', HTTP_X_BOT_SECRET=secret)
+
+    def test_bad_secret_is_forbidden(self):
+        self.assertEqual(self._post({'token': 'x', 'telegram_id': 1}, secret='wrong').status_code, 403)
+
+    def test_confirm_creates_new_user_and_profile(self):
+        token = TelegramAuthToken.generate()
+        resp = self._post({'token': token.token, 'telegram_id': 555,
+                           'first_name': 'Ali', 'last_name': 'Valiyev', 'username': 'ali'})
+        self.assertEqual(resp.status_code, 200)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.confirmed_at)
+        self.assertTrue(token.is_new_user)
+        self.assertEqual(token.user.username, 'ali')
+        self.assertTrue(TelegramProfile.objects.filter(telegram_id=555).exists())
+
+    def test_confirm_reuses_existing_telegram_user(self):
+        u = _User.objects.create(username='existing')
+        TelegramProfile.objects.create(user=u, telegram_id=777, first_name='Old')
+        token = TelegramAuthToken.generate()
+        self._post({'token': token.token, 'telegram_id': 777, 'first_name': 'New', 'username': 'whatever'})
+        token.refresh_from_db()
+        self.assertEqual(token.user_id, u.id)
+        self.assertFalse(token.is_new_user)
+
+    def test_username_collision_falls_back_to_tg_id(self):
+        _User.objects.create(username='taken')
+        token = TelegramAuthToken.generate()
+        self._post({'token': token.token, 'telegram_id': 888, 'username': 'taken'})
+        token.refresh_from_db()
+        self.assertEqual(token.user.username, 'tg_888')
+
+    def test_invalid_token_rejected(self):
+        self.assertEqual(self._post({'token': 'nope', 'telegram_id': 1}).status_code, 400)
+
+
+@override_settings(**_AUTH_OVERRIDES)
+class IssueCodeTests(TestCase):
+    URL = '/api/auth/issue-code/'
+
+    def setUp(self):
+        _cache.clear()
+
+    def _post(self, body, secret='test-bot-secret'):
+        return self.client.post(self.URL, data=_json.dumps(body),
+                                content_type='application/json', HTTP_X_BOT_SECRET=secret)
+
+    def test_bad_secret_forbidden(self):
+        self.assertEqual(self._post({'telegram_id': 1}, secret='no').status_code, 403)
+
+    def test_issues_six_digit_preconfirmed_code(self):
+        resp = self._post({'telegram_id': 999, 'first_name': 'Z', 'username': 'zed'})
+        self.assertEqual(resp.status_code, 200)
+        code = resp.json()['short_code']
+        self.assertRegex(code, r'^\d{6}$')
+        tok = TelegramAuthToken.objects.get(short_code=code)
+        self.assertIsNotNone(tok.confirmed_at)
+        self.assertEqual(tok.user.username, 'zed')
+
+
+@override_settings(**_AUTH_OVERRIDES)
+class CodeLoginTests(TestCase):
+    def setUp(self):
+        _cache.clear()
+
+    def _issue(self, is_new=False):
+        u = _User.objects.create(username='coder')
+        return u, TelegramAuthToken.issue_for_user(u, is_new)
+
+    def test_valid_code_logs_in_and_consumes_token(self):
+        u, tok = self._issue()
+        resp = self.client.post('/users/login/', {'short_code': tok.short_code})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(int(self.client.session['_auth_user_id']), u.id)
+        self.assertFalse(TelegramAuthToken.objects.filter(pk=tok.pk).exists())
+
+    def test_replayed_code_fails(self):
+        u, tok = self._issue()
+        code = tok.short_code
+        self.client.post('/users/login/', {'short_code': code})
+        self.client.logout()
+        resp = self.client.post('/users/login/', {'short_code': code})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_wrong_code_fails(self):
+        resp = self.client.post('/users/login/', {'short_code': '000000'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+
+@override_settings(**_AUTH_OVERRIDES)
+class CheckTokenTests(TestCase):
+    def setUp(self):
+        _cache.clear()
+
+    def _url(self, t):
+        return f'/api/auth/check/{t}/'
+
+    def test_pending(self):
+        token = TelegramAuthToken.generate()
+        self.assertEqual(self.client.get(self._url(token.token)).json()['status'], 'pending')
+
+    def test_confirmed_logs_in_and_deletes_token(self):
+        u = _User.objects.create(username='checker')
+        token = TelegramAuthToken.generate()
+        token.user = u
+        token.confirmed_at = _tz.now()
+        token.save()
+        data = self.client.get(self._url(token.token)).json()
+        self.assertEqual(data['status'], 'confirmed')
+        self.assertEqual(int(self.client.session['_auth_user_id']), u.id)
+        self.assertFalse(TelegramAuthToken.objects.filter(pk=token.pk).exists())
+
+    def test_invalid_token(self):
+        self.assertEqual(self.client.get(self._url('does-not-exist')).json()['status'], 'invalid')
+
+
+# ═══════════════════════════════════════════════════════════════
+# Streak logic (_update_streak / UserProfile.live_streak)
+# ═══════════════════════════════════════════════════════════════
+class StreakTests(TestCase):
+    def setUp(self):
+        self.user = _User.objects.create_user(username='streaker', password='pw-12345!x')
+        self.today = _today_uzt()
+
+    def _p(self):
+        return UserProfile.objects.get(user=self.user)
+
+    def test_first_activity_starts_at_one(self):
+        _update_streak(self.user)
+        self.assertEqual(self._p().current_streak, 1)
+
+    def test_consecutive_day_increments(self):
+        UserProfile.objects.create(user=self.user, current_streak=3, longest_streak=3,
+                                   last_activity_date=self.today - _td(days=1))
+        _update_streak(self.user)
+        p = self._p()
+        self.assertEqual(p.current_streak, 4)
+        self.assertEqual(p.longest_streak, 4)
+
+    def test_gap_resets_to_one_but_keeps_record(self):
+        UserProfile.objects.create(user=self.user, current_streak=9, longest_streak=9,
+                                   last_activity_date=self.today - _td(days=3))
+        _update_streak(self.user)
+        p = self._p()
+        self.assertEqual(p.current_streak, 1)
+        self.assertEqual(p.longest_streak, 9)
+
+    def test_same_day_is_noop(self):
+        UserProfile.objects.create(user=self.user, current_streak=5, longest_streak=5,
+                                   last_activity_date=self.today)
+        _update_streak(self.user)
+        self.assertEqual(self._p().current_streak, 5)
+
+    def test_live_streak_zero_after_lapse(self):
+        p = UserProfile.objects.create(user=self.user, current_streak=7, longest_streak=7,
+                                       last_activity_date=self.today - _td(days=2))
+        self.assertEqual(p.live_streak, 0)
+
+    def test_live_streak_alive_if_yesterday(self):
+        p = UserProfile.objects.create(user=self.user, current_streak=7, longest_streak=7,
+                                       last_activity_date=self.today - _td(days=1))
+        self.assertEqual(p.live_streak, 7)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Certificate auto-issue (_maybe_issue_certificate)
+# ═══════════════════════════════════════════════════════════════
+class CertificateAutoIssueTests(TestCase):
+    def setUp(self):
+        self.user = _User.objects.create_user(username='grad', password='pw-12345!x')
+        self.course = Course.objects.create(title='C', slug='cc', status='published')
+        self.m = Module.objects.create(title='M', slug='m', course=self.course, order=0)
+        self.l1 = Lesson.objects.create(title='L1', slug='l1', module=self.m, order=0)
+        self.l2 = Lesson.objects.create(title='L2', slug='l2', module=self.m, order=1)
+
+    def test_partial_completion_no_certificate(self):
+        LessonProgress.objects.create(user=self.user, lesson=self.l1, is_completed=True)
+        _maybe_issue_certificate(self.user, self.course)
+        self.assertFalse(Certificate.objects.filter(user=self.user, course=self.course).exists())
+
+    def test_full_completion_issues_certificate(self):
+        LessonProgress.objects.create(user=self.user, lesson=self.l1, is_completed=True)
+        LessonProgress.objects.create(user=self.user, lesson=self.l2, is_completed=True)
+        _maybe_issue_certificate(self.user, self.course)
+        self.assertTrue(Certificate.objects.filter(user=self.user, course=self.course).exists())
+
+    def test_empty_course_never_certifies(self):
+        empty = Course.objects.create(title='E', slug='ee', status='published')
+        _maybe_issue_certificate(self.user, empty)
+        self.assertFalse(Certificate.objects.filter(user=self.user, course=empty).exists())
