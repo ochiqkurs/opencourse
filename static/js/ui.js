@@ -9,8 +9,7 @@
 
   function syncThemeIcons() {
     var current = document.documentElement.getAttribute('data-theme');
-    var isDark = current === 'dark' ||
-      (!current && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var isDark = current === 'dark';
     if (iconLight && iconDark) {
       iconLight.classList.toggle('hidden', isDark);
       iconDark.classList.toggle('hidden', !isDark);
@@ -21,8 +20,7 @@
   if (btn) {
     btn.addEventListener('click', function () {
       var current = document.documentElement.getAttribute('data-theme');
-      var isDark = current === 'dark' ||
-        (!current && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var isDark = current === 'dark';
       var next = isDark ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       try { localStorage.setItem('theme', next); } catch (e) {}

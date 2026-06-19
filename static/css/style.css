@@ -3235,7 +3235,7 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 .qq-choice.qq-wrong .qq-mark::after { content: "\2717"; color: var(--danger); }
 .qq-explanation {
   margin-top: 14px; padding: 12px 14px;
-  background: var(--brand-50); border-left: 3px solid var(--brand-400);
+  background: var(--brand-50);
   border-radius: var(--r-sm); font-size: 0.9rem; line-height: 1.5;
 }
 
