@@ -115,16 +115,24 @@ def _localize_avatar(photo_url):
     try:
         resp = http_requests.get(photo_url, timeout=10)
         resp.raise_for_status()
-        ctype = resp.headers.get('Content-Type', '')
-        if not ctype.startswith('image/'):
+        content = resp.content
+        # Telegram's file API serves photos as `application/octet-stream`, so don't
+        # require an image/* content-type — sniff the magic bytes instead (and fall
+        # back to the header). Anything that isn't a recognizable image is rejected.
+        if content[:3] == b'\xff\xd8\xff':
+            ext = 'jpg'
+        elif content[:8] == b'\x89PNG\r\n\x1a\n':
+            ext = 'png'
+        elif resp.headers.get('Content-Type', '').startswith('image/'):
+            ext = 'png' if 'png' in resp.headers['Content-Type'] else 'jpg'
+        else:
             return ''
-        ext = 'png' if 'png' in ctype else 'jpg'
         # Key the filename on the file path (not the token) so the same photo maps to a
         # stable name and a rotated token doesn't orphan copies.
         digest = hashlib.sha1(photo_url.split('/file/bot', 1)[-1].encode()).hexdigest()[:16]
         path = f'avatars/{digest}.{ext}'
         if not default_storage.exists(path):
-            default_storage.save(path, ContentFile(resp.content))
+            default_storage.save(path, ContentFile(content))
         return default_storage.url(path)
     except Exception:
         return ''

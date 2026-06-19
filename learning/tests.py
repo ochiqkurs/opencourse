@@ -371,3 +371,54 @@ class CertificateAutoIssueTests(TestCase):
         empty = Course.objects.create(title='E', slug='ee', status='published')
         _maybe_issue_certificate(self.user, empty)
         self.assertFalse(Certificate.objects.filter(user=self.user, course=empty).exists())
+
+
+# ═══════════════════════════════════════════════════════════════
+# Avatar localization (_localize_avatar) — token-free, Telegram-aware
+# ═══════════════════════════════════════════════════════════════
+import tempfile as _tempfile
+from unittest import mock as _mock
+from users.views import _localize_avatar
+
+
+def _fake_resp(content, ctype):
+    r = _mock.Mock()
+    r.status_code = 200
+    r.content = content
+    r.headers = {'Content-Type': ctype}
+    r.raise_for_status = lambda: None
+    return r
+
+
+@override_settings(MEDIA_ROOT=_tempfile.mkdtemp(), STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class LocalizeAvatarTests(TestCase):
+    TG = 'https://api.telegram.org/file/bot123:ABC/photos/file_1.jpg'
+
+    def test_octet_stream_jpeg_is_saved(self):
+        # Telegram serves profile photos as application/octet-stream; they must
+        # still be recognized (via magic bytes) and saved, not dropped.
+        resp = _fake_resp(b'\xff\xd8\xff\xe0' + b'jpeg-bytes', 'application/octet-stream')
+        with _mock.patch('users.views.http_requests.get', return_value=resp):
+            url = _localize_avatar(self.TG)
+        self.assertTrue(url.startswith('/media/avatars/'), url)
+        self.assertTrue(url.endswith('.jpg'), url)
+
+    def test_png_octet_stream_is_saved(self):
+        resp = _fake_resp(b'\x89PNG\r\n\x1a\n' + b'png-bytes', 'application/octet-stream')
+        with _mock.patch('users.views.http_requests.get', return_value=resp):
+            url = _localize_avatar(self.TG)
+        self.assertTrue(url.endswith('.png'), url)
+
+    def test_non_image_rejected(self):
+        resp = _fake_resp(b'{"ok":false}', 'application/json')
+        with _mock.patch('users.views.http_requests.get', return_value=resp):
+            self.assertEqual(_localize_avatar(self.TG), '')
+
+    def test_non_telegram_url_passthrough(self):
+        self.assertEqual(_localize_avatar('/media/avatars/x.jpg'), '/media/avatars/x.jpg')
+
+    def test_empty_returns_empty(self):
+        self.assertEqual(_localize_avatar(''), '')
