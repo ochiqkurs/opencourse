@@ -1113,10 +1113,21 @@ html[data-theme="dark"] .message.info    { background: rgba(59,130,246,.12); bor
 }
 .cat-card:hover { border-color: var(--brand-300); box-shadow: var(--shadow-md); }
 .cat-card:hover::after { transform: scale(1.4); }
+/* Per-category accent so the cards read as distinct, not identical. The card
+   carries a cat-<color> class (from Category.color); the icon tint derives from
+   one --cat-color var, with a translucent chip that works in light and dark. */
+.cat-card { --cat-color: var(--brand-600); }
+.cat-card.cat-emerald { --cat-color: #059669; }
+.cat-card.cat-sky     { --cat-color: #0284C7; }
+.cat-card.cat-violet  { --cat-color: #7C3AED; }
+.cat-card.cat-amber   { --cat-color: #D97706; }
+.cat-card.cat-slate   { --cat-color: #475569; }
+.cat-card.cat-rose    { --cat-color: #E11D48; }
+.cat-card.cat-indigo  { --cat-color: #4F46E5; }
 .cat-card .c-icon {
   width: 44px; height: 44px;
-  background: var(--brand-50);
-  color: var(--brand-700);
+  background: color-mix(in srgb, var(--cat-color) 14%, transparent);
+  color: var(--cat-color);
   border-radius: var(--r-md);
   display: grid; place-items: center;
   position: relative; z-index: 1;
@@ -2486,7 +2497,10 @@ html[data-theme="dark"] .chip-soft:hover { background: rgba(16,185,129,.12); }
   display: flex; align-items: center; gap: 10px;
   box-shadow: var(--shadow-lg);
 }
-.hp-mini-emoji { font-size: 1.6rem; }
+.hp-mini-emoji { font-size: 1.6rem; display: inline-flex; color: var(--brand-600); }
+.hp-mini-emoji svg { display: block; }
+.dashboard-hero .dh-stat .num svg { vertical-align: -3px; }
+.ai-pin { display: inline-flex; vertical-align: -2px; color: var(--brand-600); }
 .hp-mini-num { font-weight: 800; font-size: .95rem; }
 .hp-mini-lab { color: var(--muted); font-size: .75rem; }
 .hp-mini-1 { bottom: 12%; left: 6%; transform: rotate(-4deg); }
