@@ -611,12 +611,11 @@
         if (typeof data.is_correct === 'undefined') { throw new Error('bad response'); }
         var correctIds = data.correct_choice_ids || (data.correct_choice_id ? [data.correct_choice_id] : []);
         lockChoices(block, correctIds);
-        if (data.explanation) {
+        if (data.explanation && !data.is_correct) {
           var ex = block.querySelector('.qq-explanation');
           ex.textContent = data.explanation;
           ex.hidden = false;
         }
-        fill.style.width = ((index + 1) / total * 100) + '%';
         finalResult = data.result;
         mode = 'next';
         btn.disabled = false;
@@ -637,6 +636,7 @@
     } else {
       index += 1;
       showQuestion(index);
+      fill.style.width = (index / total * 100) + '%';
     }
   });
 
