@@ -138,10 +138,9 @@
 
     <div class="hero-pro-right" aria-hidden="true">
       <div class="hp-card hp-card-main">
-        <div class="hp-thumb">{% if hero_course_thumbnail %}<img src="{{ hero_course_thumbnail }}" alt="React JS Asoslari" style="width:100%;height:100%;object-fit:cover">{% endif %}</div>
+        <div class="hp-thumb">{% if hero_course_thumbnail %}<img src="{{ hero_course_thumbnail }}" alt="{{ hero_course_title }}" style="width:100%;height:100%;object-fit:cover">{% endif %}</div>
         <div class="hp-body">
-          <div class="hp-cat">Frontend</div>
-          <div class="hp-title">React JS Asoslari</div>
+          <div class="hp-title">{{ hero_course_title|default:"Ochiq Kurs" }}</div>
           <div class="hp-meta">
             <span>4.9 ★★★★★</span>
             <span class="dot"></span>

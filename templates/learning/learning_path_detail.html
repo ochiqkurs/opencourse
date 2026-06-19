@@ -22,6 +22,8 @@
     {% if user.is_authenticated %}
       {% if has_certificate %}
         <a href="{% url 'learning:learning_path_certificate' path_obj.slug %}" class="btn btn-primary" style="margin-top:16px">Sertifikatni ko'rish</a>
+      {% elif path_complete %}
+        <a href="{% url 'learning:learning_path_certificate' path_obj.slug %}" class="btn btn-primary" style="margin-top:16px">Sertifikatni olish</a>
       {% elif is_enrolled %}
       {% else %}
         <form method="post" action="{% url 'learning:enroll_learning_path' path_obj.slug %}" style="margin-top:16px">

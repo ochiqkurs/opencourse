@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.db.models import Avg, Count
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 
 User = get_user_model()
 
@@ -292,6 +294,14 @@ class CourseReview(models.Model):
 
     def __str__(self):
         return f"{self.user.username} → {self.course.title} ({self.rating}★)"
+
+
+@receiver(post_save, sender=CourseReview)
+@receiver(post_delete, sender=CourseReview)
+def _sync_course_rating(sender, instance, **kwargs):
+    """Keep Course.avg_rating / rating_count in sync whenever a review is saved or
+    deleted (e.g. from the admin), not only via the submit_review view."""
+    instance.course.update_rating()
 
 
 def _generate_cert_code():

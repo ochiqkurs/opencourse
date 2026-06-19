@@ -137,17 +137,33 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 # ── Quiz Models ──
 
+class QuizQuestionInline(admin.TabularInline):
+    model = QuizQuestion
+    extra = 1
+    fields = ['order', 'question_type', 'text', 'explanation']
+    ordering = ['order']
+
+
+class QuizChoiceInline(admin.TabularInline):
+    model = QuizChoice
+    extra = 2
+    fields = ['order', 'text', 'is_correct']
+    ordering = ['order']
+
+
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
     list_display = ['title', 'lesson', 'pass_percent', 'max_attempts', 'created_at']
     list_filter = ['lesson__module__course']
     search_fields = ['title', 'lesson__title']
+    inlines = [QuizQuestionInline]
 
 
 @admin.register(QuizQuestion)
 class QuizQuestionAdmin(admin.ModelAdmin):
     list_display = ['quiz', 'question_type', 'order', 'text_preview']
     list_filter = ['question_type']
+    inlines = [QuizChoiceInline]
 
     def text_preview(self, obj):
         return obj.text[:80]

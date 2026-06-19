@@ -153,11 +153,6 @@ urlpatterns = [
         name='check_quiz_answer',
     ),
     path(
-        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/urinish/<int:attempt_id>/javob/',
-        views.submit_quiz_answer,
-        name='submit_quiz_answer',
-    ),
-    path(
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/test/<int:quiz_id>/urinish/<int:attempt_id>/natija/',
         views.quiz_result,
         name='quiz_result',

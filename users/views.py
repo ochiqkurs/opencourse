@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import json
 import random
@@ -5,6 +6,8 @@ import re
 import requests as http_requests
 from datetime import timedelta
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
@@ -90,6 +93,41 @@ def _cleanup_expired_tokens():
     """
     cutoff = timezone.now() - timedelta(minutes=10)
     TelegramAuthToken.objects.filter(created_at__lt=cutoff).delete()
+
+
+def _localize_avatar(photo_url):
+    """Download a Telegram-hosted avatar to local media so the stored URL never
+    contains the bot token.
+
+    Telegram file URLs embed the bot token (`.../file/bot<TOKEN>/<path>`); persisting
+    one and rendering it in an `<img src>` (the leaderboard/instructor pages are public)
+    leaks the token to anyone viewing the page source. They also expire within ~1 hour,
+    so they break anyway. Fetch the image once, server-side, and store a token-free
+    `/media/` URL instead.
+
+    Best-effort: any failure returns '' (no avatar) rather than blocking sign-in.
+    Non-Telegram URLs are passed through unchanged.
+    """
+    if not photo_url:
+        return ''
+    if not photo_url.startswith('https://api.telegram.org/'):
+        return photo_url
+    try:
+        resp = http_requests.get(photo_url, timeout=10)
+        resp.raise_for_status()
+        ctype = resp.headers.get('Content-Type', '')
+        if not ctype.startswith('image/'):
+            return ''
+        ext = 'png' if 'png' in ctype else 'jpg'
+        # Key the filename on the file path (not the token) so the same photo maps to a
+        # stable name and a rotated token doesn't orphan copies.
+        digest = hashlib.sha1(photo_url.split('/file/bot', 1)[-1].encode()).hexdigest()[:16]
+        path = f'avatars/{digest}.{ext}'
+        if not default_storage.exists(path):
+            default_storage.save(path, ContentFile(resp.content))
+        return default_storage.url(path)
+    except Exception:
+        return ''
 
 
 def _get_or_create_telegram_user(telegram_id, first_name, last_name, username, photo_url):
@@ -270,6 +308,10 @@ class TelegramConfirmView(View):
         if not auth_token.is_valid():
             return JsonResponse({'error': 'expired or already confirmed'}, status=400)
 
+        # Localize the avatar (network I/O) outside the DB transaction so we never
+        # store the token-bearing Telegram URL.
+        photo_url = _localize_avatar(photo_url)
+
         with transaction.atomic():
             user, is_new_user = _get_or_create_telegram_user(
                 telegram_id, first_name, last_name, username, photo_url,
@@ -311,6 +353,10 @@ class IssueCodeView(View):
 
         if not telegram_id:
             return JsonResponse({'error': 'telegram_id is required'}, status=400)
+
+        # Localize the avatar (network I/O) outside the DB transaction so we never
+        # store the token-bearing Telegram URL.
+        photo_url = _localize_avatar(photo_url)
 
         with transaction.atomic():
             user, is_new_user = _get_or_create_telegram_user(

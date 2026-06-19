@@ -187,20 +187,11 @@ class HomeView(View):
                     ).order_by('-avg_rating', '-rating_count')[:6]
                 )
 
-        # Hero card thumbnail (first lesson of ReactJS course)
-        hero_course_thumbnail = None
-        try:
-            reactjs = Course.objects.get(slug='reactjs')
-            first_lesson = (
-                Lesson.objects
-                .filter(module__course=reactjs)
-                .order_by('module__order', 'order')
-                .first()
-            )
-            if first_lesson and first_lesson.youtube_video_id:
-                hero_course_thumbnail = f'https://img.youtube.com/vi/{first_lesson.youtube_video_id}/hqdefault.jpg'
-        except Course.DoesNotExist:
-            pass
+        # Hero card thumbnail: the top featured course (falls back to the newest),
+        # instead of a hardcoded course slug.
+        hero_course = featured[0] if featured else (newest[0] if newest else None)
+        hero_course_thumbnail = hero_course.get_thumbnail_url() if hero_course else None
+        hero_course_title = hero_course.title if hero_course else ''
 
         return render(request, self.template_name, {
             'featured': featured,
@@ -221,6 +212,7 @@ class HomeView(View):
             'recommended': recommended,
             'wishlist_ids': _user_wishlist_ids(request.user),
             'hero_course_thumbnail': hero_course_thumbnail,
+            'hero_course_title': hero_course_title,
         })
 
 
@@ -636,7 +628,8 @@ class LessonDetailView(View):
                     best_attempt = max(past_attempts, key=lambda a: a.percentage())
                 attempts_remaining = -1
                 if quiz.max_attempts > 0:
-                    attempts_remaining = max(quiz.max_attempts - len(user_attempts), 0)
+                    used_attempts = sum(1 for a in user_attempts if a.completed_at is not None)
+                    attempts_remaining = max(quiz.max_attempts - used_attempts, 0)
                 quizzes_with_meta.append({
                     'quiz': quiz,
                     'questions_count': questions_count,
@@ -749,6 +742,11 @@ def mark_lesson_complete(request, course_slug, module_slug, lesson_slug):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
+
+    # Enroll on completion too (record_view does the same on first play); otherwise a
+    # user who completes via the manual button never gets an Enrollment row and the
+    # course is missing from "My Learning" / the profile lists.
+    Enrollment.objects.get_or_create(user=request.user, course=lesson.module.course)
 
     progress, _ = LessonProgress.objects.get_or_create(
         user=request.user, lesson=lesson
@@ -1167,14 +1165,14 @@ def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
     attempts_remaining = -1
     if request.user.is_authenticated:
         user_attempts = QuizAttempt.objects.filter(user=request.user, quiz=quiz).order_by('-started_at')
-        total_attempts = user_attempts.count()
+        # Only finished attempts consume a slot; an abandoned in-progress attempt is
+        # reused by start_quiz, so counting it here would wrongly shrink the remaining count.
+        used_attempts = user_attempts.filter(completed_at__isnull=False).count()
         past_attempts = list(user_attempts[:10])
         if past_attempts:
             best_attempt = max(past_attempts, key=lambda a: a.percentage())
         if quiz.max_attempts > 0:
-            # Clamp on the true attempt count, not the sliced (max 10) preview list,
-            # so the displayed remaining count stays correct and never goes negative.
-            attempts_remaining = max(quiz.max_attempts - total_attempts, 0)
+            attempts_remaining = max(quiz.max_attempts - used_attempts, 0)
     return render(request, 'learning/quiz_detail.html', {
         'course': lesson.module.course,
         'module': lesson.module,
@@ -1199,7 +1197,9 @@ def start_quiz(request, course_slug, module_slug, lesson_slug, quiz_id):
         user=request.user, quiz=quiz, completed_at__isnull=True
     ).first()
     if in_progress is None:
-        past_count = QuizAttempt.objects.filter(user=request.user, quiz=quiz).count()
+        past_count = QuizAttempt.objects.filter(
+            user=request.user, quiz=quiz, completed_at__isnull=False
+        ).count()
         if quiz.max_attempts > 0 and past_count >= quiz.max_attempts:
             messages.error(request, "Ushbu test uchun maksimal urinishlar soniga yetdingiz.")
             return redirect('learning:quiz_detail', course_slug, module_slug, lesson_slug, quiz_id)
@@ -1314,64 +1314,6 @@ def check_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, a
 
 
 @login_required
-@transaction.atomic
-def submit_quiz_answer(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
-    """Grade a whole quiz from one JSON payload (legacy all-at-once submission)."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
-    quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
-    attempt = get_object_or_404(QuizAttempt, id=attempt_id, user=request.user, quiz=quiz)
-    if attempt.completed_at:
-        return JsonResponse({'error': 'Attempt already completed'}, status=400)
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    answers = data.get('answers', {})
-    attempt.answers.all().delete()
-    for q_data in quiz.questions.prefetch_related('choices').all():
-        val = answers.get(str(q_data.id))
-        selected_choice = None
-        selected_objs = []
-        is_correct = False
-        if q_data.question_type == 'multi_select' and isinstance(val, list):
-            sel_ids = set()
-            for x in val:
-                try:
-                    sel_ids.add(int(x))
-                except (ValueError, TypeError):
-                    pass
-            selected_objs = list(q_data.choices.filter(id__in=sel_ids))
-            correct_ids = set(q_data.choices.filter(is_correct=True).values_list('id', flat=True))
-            is_correct = bool(sel_ids) and sel_ids == correct_ids
-        elif val:
-            try:
-                selected_choice = q_data.choices.get(id=int(val))
-                is_correct = selected_choice.is_correct
-            except (QuizChoice.DoesNotExist, ValueError, TypeError):
-                pass
-        answer = QuizAnswer.objects.create(
-            attempt=attempt,
-            question=q_data,
-            selected_choice=selected_choice,
-            is_correct=is_correct,
-        )
-        if selected_objs:
-            answer.selected_choices.set(selected_objs)
-    _finalize_quiz_attempt(attempt, request.user, lesson)
-
-    return JsonResponse({
-        'status': 'ok',
-        'score': float(attempt.score),
-        'max_score': attempt.max_score,
-        'percentage': attempt.percentage(),
-        'passed': attempt.passed,
-        'redirect_url': reverse('learning:quiz_result', args=[course_slug, module_slug, lesson_slug, quiz_id, attempt_id]),
-    })
-
-
-@login_required
 def quiz_result(request, course_slug, module_slug, lesson_slug, quiz_id, attempt_id):
     lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
     quiz = get_object_or_404(Quiz, id=quiz_id, lesson=lesson)
@@ -1479,10 +1421,9 @@ class LearningPathDetailView(View):
                 'is_complete': is_course_complete,
             })
 
+        # A GET must stay side-effect free, so the certificate is NOT minted here —
+        # it is claimed via the POST-only /sertifikat/ endpoint (learning_path_certificate).
         path_complete = total_courses > 0 and completed_courses >= total_courses
-        if path_complete and request.user.is_authenticated and not has_certificate:
-            LearningPathCertificate.objects.get_or_create(user=request.user, path=path_obj)
-            has_certificate = True
 
         return render(request, self.template_name, {
             'path_obj': path_obj,
@@ -1506,10 +1447,33 @@ def enroll_learning_path(request, path_slug):
     return redirect('learning:learning_path_detail', path_slug=path_slug)
 
 
+def _path_is_complete(user, path_obj):
+    """True if the user has completed every course in the path (all lessons done)."""
+    course_ids = list(path_obj.path_courses.values_list('course_id', flat=True))
+    if not course_ids:
+        return False
+    lesson_counts = dict(
+        Lesson.objects.filter(module__course_id__in=course_ids)
+        .values_list('module__course_id').annotate(c=Count('id'))
+    )
+    done_counts = dict(
+        LessonProgress.objects.filter(
+            user=user, lesson__module__course_id__in=course_ids, is_completed=True,
+        ).values_list('lesson__module__course_id').annotate(c=Count('id'))
+    )
+    for cid in course_ids:
+        total = lesson_counts.get(cid, 0)
+        if total == 0 or done_counts.get(cid, 0) < total:
+            return False
+    return True
+
+
 @login_required
 def learning_path_certificate(request, path_slug):
     path_obj = get_object_or_404(LearningPath, slug=path_slug)
     cert = LearningPathCertificate.objects.filter(user=request.user, path=path_obj).first()
+    if not cert and _path_is_complete(request.user, path_obj):
+        cert, _ = LearningPathCertificate.objects.get_or_create(user=request.user, path=path_obj)
     if not cert:
         messages.warning(request, "Sertifikat olish uchun yo'nalishdagi barcha kurslarni tugating.")
         return redirect('learning:learning_path_detail', path_slug=path_slug)
