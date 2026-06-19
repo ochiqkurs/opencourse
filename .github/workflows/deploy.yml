@@ -19,21 +19,43 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -e
+            set -euo pipefail
             cd ~/opencourse
             git fetch origin master
             git reset --hard origin/master
             source venv/bin/activate
             pip install -r requirements.txt --quiet
+            # Fail the deploy loudly if a model change shipped without its migration,
+            # before we touch the database.
+            python manage.py makemigrations --check --dry-run
             python manage.py migrate --noinput
             python manage.py createcachetable
             python manage.py clear_expired_tokens
             python manage.py collectstatic --noinput
             sudo /usr/bin/systemctl restart gunicorn-ochiqkurs
+            # Health check: gunicorn must actually answer on its socket after the
+            # restart. Any non-5xx (even a 301 SSL-redirect / 400 host check) proves
+            # the app is serving; a 5xx or connection failure fails the deploy so a
+            # broken release surfaces instead of reporting success on a dead site.
+            ok=0
+            for i in $(seq 1 10); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: ochiqkurs.uz" \
+                     --unix-socket ~/opencourse/gunicorn.sock http://localhost/ || echo 000)
+              if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+                ok=1; echo "Health check OK (HTTP $code)"; break
+              fi
+              echo "Health check attempt $i/10: got $code"; sleep 2
+            done
+            if [ "$ok" != "1" ]; then
+              echo "Health check FAILED — gunicorn is not serving after restart."
+              journalctl -u gunicorn-ochiqkurs -n 40 --no-pager || true
+              exit 1
+            fi
 
       - name: Purge Cloudflare cache
         run: |
-          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+          curl --fail --silent --show-error -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}'
