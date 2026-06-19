@@ -622,7 +622,8 @@ class LessonDetailView(View):
                 user_attempts = list(
                     quiz.attempts.filter(user=request.user).order_by('-started_at')
                 )
-                past_attempts = user_attempts[:10]
+                # History shows finished attempts only; an in-progress one isn't a result.
+                past_attempts = [a for a in user_attempts if a.completed_at is not None][:10]
                 best_attempt = None
                 if past_attempts:
                     best_attempt = max(past_attempts, key=lambda a: a.percentage())
@@ -1164,8 +1165,11 @@ def quiz_detail(request, course_slug, module_slug, lesson_slug, quiz_id):
         user_attempts = QuizAttempt.objects.filter(user=request.user, quiz=quiz).order_by('-started_at')
         # Only finished attempts consume a slot; an abandoned in-progress attempt is
         # reused by start_quiz, so counting it here would wrongly shrink the remaining count.
-        used_attempts = user_attempts.filter(completed_at__isnull=False).count()
-        past_attempts = list(user_attempts[:10])
+        finished_attempts = user_attempts.filter(completed_at__isnull=False)
+        used_attempts = finished_attempts.count()
+        # Only show finished attempts in the history — an in-progress attempt would
+        # otherwise render as a blank-dated "failed" row.
+        past_attempts = list(finished_attempts[:10])
         if past_attempts:
             best_attempt = max(past_attempts, key=lambda a: a.percentage())
         if quiz.max_attempts > 0:

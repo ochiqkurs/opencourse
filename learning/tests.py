@@ -134,6 +134,18 @@ class MultiSelectQuizTests(TestCase):
         data = self._check([self.c1.id])
         self.assertEqual(set(data['correct_choice_ids']), {self.c1.id, self.c2.id})
 
+    def test_quiz_detail_history_excludes_in_progress(self):
+        from django.utils import timezone
+        QuizAttempt.objects.create(user=self.user, quiz=self.quiz, max_score=1)  # in-progress
+        done = QuizAttempt.objects.create(user=self.user, quiz=self.quiz, max_score=1,
+                                          completed_at=timezone.now())
+        url = reverse('learning:quiz_detail', args=[
+            self.course.slug, self.module.slug, self.lesson.slug, self.quiz.id])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        # Only the finished attempt appears in the history, not the in-progress one.
+        self.assertEqual(list(resp.context['past_attempts']), [done])
+
 
 # ═══════════════════════════════════════════════════════════════
 # Auth flows (Telegram confirm / issue-code / code login / poll)
