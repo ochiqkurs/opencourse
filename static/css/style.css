@@ -1209,12 +1209,28 @@ html[data-theme="dark"] .message.info    { background: rgba(59,130,246,.12); bor
 
 /* ── Course Detail ─────────────────────────────────────────── */
 .course-hero {
-  background: #0F1E18;
-  color: #F9FAFB;
+  /* Theme-adaptive hero: light by default (daytime), dark overridden below.
+     All hero text reads from these --ch-* vars so both modes stay legible. */
+  --ch-bg: var(--brand-50);
+  --ch-text: var(--gray-900);
+  --ch-text-soft: var(--gray-700);
+  --ch-mute: var(--gray-500);
+  --ch-link: var(--brand-700);
+  --ch-stars: var(--accent-500);
+  background: var(--ch-bg);
+  color: var(--ch-text-soft);
   padding: 48px 0 56px;
   margin-bottom: 32px;
   position: relative;
   overflow: hidden;
+}
+html[data-theme="dark"] .course-hero {
+  --ch-bg: #0F1E18;
+  --ch-text: #fff;
+  --ch-text-soft: rgba(255,255,255,.78);
+  --ch-mute: rgba(255,255,255,.65);
+  --ch-link: #fff;
+  --ch-stars: var(--accent-300);
 }
 .course-hero-inner {
   position: relative;
@@ -1228,31 +1244,34 @@ html[data-theme="dark"] .message.info    { background: rgba(59,130,246,.12); bor
 }
 @media (max-width: 960px) { .course-hero-inner { grid-template-columns: 1fr; } }
 .course-hero h1 {
-  color: #fff;
+  color: var(--ch-text);
   font-size: clamp(1.6rem, 1.9vw + 1rem, 2.5rem);
   margin-bottom: 12px;
 }
 .course-hero .ch-subtitle {
-  color: rgba(255,255,255,.78);
+  color: var(--ch-text-soft);
   font-size: 1.05rem;
   line-height: 1.55;
   margin-bottom: 18px;
   max-width: 640px;
 }
-.course-hero .breadcrumb { color: rgba(255,255,255,.6); margin-bottom: 12px; }
-.course-hero .breadcrumb a { color: rgba(255,255,255,.85); }
+.course-hero .breadcrumb { color: var(--ch-mute); margin-bottom: 12px; }
+.course-hero .breadcrumb a { color: var(--ch-text-soft); }
 .course-hero .ch-meta {
   display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
-  color: rgba(255,255,255,.78); font-size: .9rem;
+  color: var(--ch-text-soft); font-size: .9rem;
 }
-.course-hero .ch-meta .meta-num { color: #fff; font-weight: 700; margin-right: 4px; }
-.course-hero .ch-meta .stars-glyphs { color: var(--accent-300); margin-right: 4px; }
+.course-hero .ch-meta .meta-num { color: var(--ch-text); font-weight: 700; margin-right: 4px; }
+.course-hero .ch-meta .stars-glyphs { color: var(--ch-stars); margin-right: 4px; }
+.course-hero .ch-meta .meta-soft { color: var(--ch-mute); }
 .course-hero .ch-instructor {
   display: flex; gap: 10px; align-items: center;
-  color: rgba(255,255,255,.85);
+  color: var(--ch-text-soft);
   font-size: .92rem;
   margin-top: 14px;
 }
+.course-hero .ch-instructor strong { color: var(--ch-text); }
+.course-hero .ch-instructor a { color: var(--ch-link); }
 
 .enroll-card {
   background: var(--surface);
@@ -2788,15 +2807,26 @@ html[data-theme="dark"] .cs-list a.active { background: rgba(16,185,129,.15); co
 .ec-thumb { position: relative; }
 .ec-preview-btn {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  background: rgba(17, 24, 39, .35);
-  color: #fff;
-  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  /* Darker scrim so the label reads over any (busy/light) thumbnail. */
+  background: rgba(10, 20, 16, .55);
   text-decoration: none;
   opacity: 0; transition: opacity .15s;
 }
-.ec-thumb:hover .ec-preview-btn { opacity: 1; }
-.ec-preview-btn svg { width: 22px; height: 22px; }
+.ec-thumb:hover .ec-preview-btn,
+.ec-preview-btn:focus-visible { opacity: 1; }
+/* Solid brand pill keeps the play icon + text legible regardless of the image. */
+.ec-preview-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--brand-600);
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+.ec-preview-btn:hover .ec-preview-pill { background: var(--brand-700); }
+.ec-preview-pill svg { width: 18px; height: 18px; }
 .ec-wishlist {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: 1px solid var(--border);
