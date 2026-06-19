@@ -162,7 +162,7 @@
         <div class="announce-list">
           {% for a in announcements %}
             <div class="announce-item">
-              <div class="ai-title">{% if a.is_pinned %}<span class="ai-pin">📌</span> {% endif %}{{ a.title }}</div>
+              <div class="ai-title">{% if a.is_pinned %}<span class="ai-pin">{% lucide 'pin' 14 %}</span> {% endif %}{{ a.title }}</div>
               <div class="ai-body">{{ a.body|linebreaksbr }}</div>
               <div class="ai-meta">{{ a.created_at|uz_date }}</div>
             </div>

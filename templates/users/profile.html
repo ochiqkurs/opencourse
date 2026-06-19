@@ -18,7 +18,7 @@
       {% endwith %}
     </span>
     <div style="position:relative">
-      <h1 class="welcome">Salom, {{ user.first_name|default:user.username }} 👋</h1>
+      <h1 class="welcome">Salom, {{ user.first_name|default:user.username }}</h1>
       <p class="welcome-sub">Bilim olishni davom ettiraylik. {% if current_streak %}{{ current_streak }} kunlik streakingiz davom etmoqda.{% else %}Bugun yangi kunni boshlang.{% endif %}</p>
     </div>
     <div class="dh-stats">
@@ -27,7 +27,7 @@
         <div class="lab">Mening kurslarim</div>
       </a>
       <div class="dh-stat">
-        <div class="num">🔥 {{ current_streak }}</div>
+        <div class="num">{% lucide 'flame' 20 %} {{ current_streak }}</div>
         <div class="lab">Kunlik streak</div>
       </div>
       <div class="dh-stat">
@@ -35,7 +35,7 @@
         <div class="lab">Tugatilgan dars</div>
       </div>
       <a class="dh-stat" href="{% url 'learning:leaderboard' %}" style="text-decoration:none;color:inherit">
-        <div class="num">🏆</div>
+        <div class="num">{% lucide 'trophy' 24 %}</div>
         <div class="lab">Reyting</div>
       </a>
     </div>
