@@ -691,10 +691,13 @@ class LessonDetailView(View):
 
 @login_required
 def record_view(request, course_slug, module_slug, lesson_slug):
-    """Record that the user pressed play on this lesson today.
+    """Record that the user pressed play / opened this lesson today.
 
-    Idempotent per (user, lesson, day). Also marks the lesson complete and
-    bumps the streak — playing the video counts as completing the lesson.
+    Idempotent per (user, lesson, day). This is a *view*: it enrolls the user and
+    bumps the streak (watching counts as daily activity), but it does NOT mark the
+    lesson complete. Completion is a separate, explicit signal — the video watched
+    to ~90%/the end, or the manual button — both of which POST to
+    mark_lesson_complete.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -710,20 +713,14 @@ def record_view(request, course_slug, module_slug, lesson_slug):
         user=request.user, lesson=lesson, viewed_on=today,
     )
 
+    # Touch progress so last_watched_at reflects this view, but leave is_completed
+    # untouched — viewing is not completing.
     progress, _ = LessonProgress.objects.get_or_create(
         user=request.user, lesson=lesson
     )
-    newly_completed = False
-    if not progress.is_completed:
-        progress.is_completed = True
-        progress.save(update_fields=['is_completed'])
-        newly_completed = True
-    else:
-        progress.save(update_fields=['last_watched_at'])
+    progress.save(update_fields=['last_watched_at'])
 
     _update_streak(request.user)
-    if newly_completed:
-        _maybe_issue_certificate(request.user, lesson.module.course)
 
     return JsonResponse({
         'status': 'ok',

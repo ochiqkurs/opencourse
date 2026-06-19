@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import (
-    Course, Module, Lesson, Enrollment, LessonProgress, Certificate,
+    Course, Module, Lesson, Enrollment, LessonProgress, LessonView, Certificate,
 )
 
 
@@ -54,11 +54,21 @@ class ProgressIntegrityTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Enrollment.objects.filter(user=self.user, course=course).exists())
 
-    def test_play_enrolls_and_completes(self):
+    def test_play_records_view_and_enrolls_but_does_not_complete(self):
+        # A "view" (play / article open) enrolls and logs activity, but completion
+        # is now a separate signal (video ~90%/end, or the manual button).
         course, module, lesson = self._make_course()
         resp = self.client.post(self._url('record_view', course, module, lesson))
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(Enrollment.objects.filter(user=self.user, course=course).exists())
+        self.assertTrue(LessonView.objects.filter(user=self.user, lesson=lesson).exists())
+        self.assertFalse(
+            LessonProgress.objects.filter(user=self.user, lesson=lesson, is_completed=True).exists()
+        )
+
+    def test_mark_complete_completes_the_lesson(self):
+        course, module, lesson = self._make_course()
+        self.client.post(self._url('mark_complete', course, module, lesson))
         self.assertTrue(
             LessonProgress.objects.filter(user=self.user, lesson=lesson, is_completed=True).exists()
         )
