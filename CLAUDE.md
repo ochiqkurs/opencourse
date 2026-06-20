@@ -173,7 +173,7 @@ CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):
 - The Cloudflare purge step uses `curl --fail`, so a rejected purge (e.g. bad `CLOUDFLARE_API_TOKEN`) fails loudly instead of passing silently.
 - Then purges the Cloudflare cache
 
-`createcachetable` provisions the `cache_table` the rate limiter needs (idempotent). Production Gunicorn binds a unix socket (`~/opencourse/gunicorn.sock`) behind nginx, not a TCP port. The Telegram bot is a separate repo/process on the same server (systemd unit `telegram-bot-ochiqkurs`, dir `~/opencourse-bot`) and is **not** deployed by this workflow — push and restart it manually.
+`createcachetable` provisions the `cache_table` the rate limiter needs (idempotent). Production Gunicorn binds a unix socket (`~/opencourse/gunicorn.sock`) behind nginx, not a TCP port. The Telegram bot is a separate repo/process on the same server (systemd unit `telegram-bot-ochiqkurs`, dir `~/opencourse-bot`) and is **not** deployed by this workflow — it has **its own** GitHub Actions CI/CD in the `muzaffar-murodovich/opencourse-bot` repo (push to its `master` → SSH deploy → `systemctl restart telegram-bot-ochiqkurs` → `systemctl is-active` health check). The bot deploy uses a **dedicated passphraseless** SSH deploy key (the personal `~/.ssh/id_ed25519` is passphrase-protected and only works locally via the macOS Keychain, so it can't be used by Actions).
 
 Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handles static files.
 
