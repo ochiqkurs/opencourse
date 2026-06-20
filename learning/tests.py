@@ -286,6 +286,45 @@ class BotStartTests(TestCase):
 
 
 @override_settings(**_AUTH_OVERRIDES)
+class BroadcastEndpointTests(TestCase):
+    CONTACTS_URL = '/api/telemetry/contacts/'
+    BLOCK_URL = '/api/telemetry/mark-blocked/'
+
+    def setUp(self):
+        _cache.clear()
+        TelegramContact.objects.create(telegram_id=1, chat_id=1, username='a')
+        TelegramContact.objects.create(telegram_id=2, chat_id=2, username='b')
+        TelegramContact.objects.create(telegram_id=3, chat_id=3, blocked=True)
+        TelegramContact.objects.create(telegram_id=4, chat_id=None)  # no chat_id
+
+    def test_contacts_requires_secret(self):
+        self.assertEqual(self.client.get(self.CONTACTS_URL).status_code, 403)
+
+    def test_contacts_excludes_blocked_and_chatless(self):
+        resp = self.client.get(self.CONTACTS_URL, HTTP_X_BOT_SECRET='test-bot-secret')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        ids = {c['telegram_id'] for c in data['contacts']}
+        self.assertEqual(ids, {1, 2})
+        self.assertEqual(data['count'], 2)
+
+    def test_mark_blocked_requires_secret(self):
+        resp = self.client.post(self.BLOCK_URL, data=_json.dumps({'telegram_ids': [1]}),
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_mark_blocked_sets_flag(self):
+        resp = self.client.post(self.BLOCK_URL, data=_json.dumps({'telegram_ids': [1, 2]}),
+                                content_type='application/json', HTTP_X_BOT_SECRET='test-bot-secret')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['blocked'], 2)
+        self.assertTrue(TelegramContact.objects.get(telegram_id=1).blocked)
+        # Now excluded from the broadcast list.
+        resp = self.client.get(self.CONTACTS_URL, HTTP_X_BOT_SECRET='test-bot-secret')
+        self.assertEqual(resp.json()['count'], 0)
+
+
+@override_settings(**_AUTH_OVERRIDES)
 class CodeLoginTests(TestCase):
     def setUp(self):
         _cache.clear()

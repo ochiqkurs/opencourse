@@ -107,6 +107,9 @@ class TelegramContact(models.Model):
     # Sticky: True once this contact has ever arrived via a site deep-link token.
     came_with_token = models.BooleanField(default=False)
     start_count = models.PositiveIntegerField(default=0)
+    # Set when a broadcast finds the user has blocked the bot, so future
+    # broadcasts skip them.
+    blocked = models.BooleanField(default=False)
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)
 

@@ -421,6 +421,56 @@ class BotStartView(View):
         return JsonResponse({'status': 'ok'})
 
 
+@method_decorator(csrf_exempt, name='dispatch')
+class ContactsListView(View):
+    """Returns the broadcast list (non-blocked contacts that have a chat_id).
+
+    Consumed by the bot's broadcast script. Gated by X-Bot-Secret. Read-only.
+    """
+
+    def get(self, request):
+        secret = request.headers.get('X-Bot-Secret', '')
+        if not hmac.compare_digest(secret, settings.BOT_SECRET):
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+
+        contacts = list(
+            TelegramContact.objects
+            .filter(blocked=False, chat_id__isnull=False)
+            .values('telegram_id', 'chat_id')
+        )
+        return JsonResponse({'count': len(contacts), 'contacts': contacts})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class MarkBlockedView(View):
+    """Marks contacts (by telegram_id) as blocked so future broadcasts skip them.
+
+    Called by the broadcast script for users who have blocked the bot. Gated by
+    X-Bot-Secret.
+    """
+
+    def post(self, request):
+        secret = request.headers.get('X-Bot-Secret', '')
+        if not hmac.compare_digest(secret, settings.BOT_SECRET):
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        telegram_ids = data.get('telegram_ids') or []
+        if not isinstance(telegram_ids, list):
+            return JsonResponse({'error': 'telegram_ids must be a list'}, status=400)
+
+        updated = (
+            TelegramContact.objects
+            .filter(telegram_id__in=telegram_ids)
+            .update(blocked=True)
+        )
+        return JsonResponse({'blocked': updated})
+
+
 class CheckTokenView(View):
     """Polled by the browser every 2 seconds to check Telegram confirmation status."""
 
