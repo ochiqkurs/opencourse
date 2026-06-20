@@ -155,7 +155,7 @@ from datetime import timedelta as _td
 from django.contrib.auth.models import User as _User
 from django.core.cache import cache as _cache
 from django.utils import timezone as _tz
-from users.models import TelegramAuthToken, TelegramProfile, UserProfile
+from users.models import TelegramAuthToken, TelegramContact, TelegramProfile, UserProfile
 from learning.views import _update_streak, _maybe_issue_certificate, _today_uzt
 
 # Use a known bot secret, an in-memory cache (the prod DB cache table is not
@@ -237,6 +237,52 @@ class IssueCodeTests(TestCase):
         tok = TelegramAuthToken.objects.get(short_code=code)
         self.assertIsNotNone(tok.confirmed_at)
         self.assertEqual(tok.user.username, 'zed')
+
+
+@override_settings(**_AUTH_OVERRIDES)
+class BotStartTests(TestCase):
+    URL = '/api/telemetry/bot-start/'
+
+    def setUp(self):
+        _cache.clear()
+
+    def _post(self, body, secret='test-bot-secret'):
+        return self.client.post(self.URL, data=_json.dumps(body),
+                                content_type='application/json', HTTP_X_BOT_SECRET=secret)
+
+    def test_bad_secret_forbidden(self):
+        self.assertEqual(self._post({'telegram_id': 1}, secret='no').status_code, 403)
+
+    def test_missing_telegram_id_rejected(self):
+        self.assertEqual(self._post({'username': 'x'}).status_code, 400)
+
+    def test_creates_contact_on_first_start(self):
+        resp = self._post({'telegram_id': 42, 'chat_id': 42, 'username': 'ali',
+                           'first_name': 'Ali', 'language_code': 'uz', 'has_token': True})
+        self.assertEqual(resp.status_code, 200)
+        c = TelegramContact.objects.get(telegram_id=42)
+        self.assertEqual(c.chat_id, 42)
+        self.assertEqual(c.username, 'ali')
+        self.assertTrue(c.came_with_token)
+        self.assertEqual(c.start_count, 1)
+
+    def test_repeated_start_increments_and_does_not_duplicate(self):
+        self._post({'telegram_id': 42, 'first_name': 'Ali'})
+        self._post({'telegram_id': 42, 'first_name': 'Ali'})
+        self.assertEqual(TelegramContact.objects.filter(telegram_id=42).count(), 1)
+        self.assertEqual(TelegramContact.objects.get(telegram_id=42).start_count, 2)
+
+    def test_came_with_token_is_sticky(self):
+        self._post({'telegram_id': 42, 'has_token': True})
+        self._post({'telegram_id': 42})  # later organic start must not unset it
+        self.assertTrue(TelegramContact.objects.get(telegram_id=42).came_with_token)
+
+    def test_sparse_update_does_not_wipe_identity(self):
+        self._post({'telegram_id': 42, 'username': 'ali', 'first_name': 'Ali'})
+        self._post({'telegram_id': 42})  # no identity fields
+        c = TelegramContact.objects.get(telegram_id=42)
+        self.assertEqual(c.username, 'ali')
+        self.assertEqual(c.first_name, 'Ali')
 
 
 @override_settings(**_AUTH_OVERRIDES)

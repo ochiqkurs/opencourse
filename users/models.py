@@ -88,3 +88,27 @@ class TelegramProfile(models.Model):
 
     def __str__(self):
         return f'TelegramProfile({self.telegram_id})'
+
+
+class TelegramContact(models.Model):
+    """Anyone who has pressed /start on the bot — even without completing login.
+
+    Populated by the bot's fire-and-forget POST to /api/telemetry/bot-start/.
+    Distinct from TelegramProfile, which only exists once a user actually
+    authenticates. Used for funnel metrics (start → login) and as a broadcast
+    list — `chat_id` is what a broadcast would target.
+    """
+    telegram_id = models.BigIntegerField(unique=True)
+    chat_id = models.BigIntegerField(null=True, blank=True)
+    username = models.CharField(max_length=100, blank=True)
+    first_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+    language_code = models.CharField(max_length=12, blank=True)
+    # Sticky: True once this contact has ever arrived via a site deep-link token.
+    came_with_token = models.BooleanField(default=False)
+    start_count = models.PositiveIntegerField(default=0)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'TelegramContact({self.telegram_id})'

@@ -33,7 +33,7 @@ from learning.forms import CourseForm, ModuleForm, LessonForm, CategoryForm
 from .forms import (
     UserProfileForm, SetUsernamePasswordForm, UsernamePasswordLoginForm,
 )
-from .models import TelegramAuthToken, TelegramProfile
+from .models import TelegramAuthToken, TelegramContact, TelegramProfile
 
 
 def _client_ip(request):
@@ -376,6 +376,49 @@ class IssueCodeView(View):
             'short_code': auth_token.short_code,
             'expires_in_seconds': 600,
         })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class BotStartView(View):
+    """Records anyone who presses /start on the bot, even without logging in.
+
+    Fire-and-forget telemetry from the bot (best-effort; the bot never blocks
+    on it), gated by the same X-Bot-Secret check as the other bot endpoints.
+    Feeds funnel metrics (start → login) and a broadcast list — the stored
+    chat_id is what a future broadcast would target.
+    """
+
+    def post(self, request):
+        secret = request.headers.get('X-Bot-Secret', '')
+        if not hmac.compare_digest(secret, settings.BOT_SECRET):
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        telegram_id = data.get('telegram_id')
+        if not telegram_id:
+            return JsonResponse({'error': 'telegram_id is required'}, status=400)
+
+        with transaction.atomic():
+            contact, _ = TelegramContact.objects.get_or_create(telegram_id=telegram_id)
+            # Only overwrite with non-empty values so a later sparse update can't
+            # wipe identity we already captured.
+            contact.chat_id = data.get('chat_id') or contact.chat_id
+            contact.username = data.get('username', '').strip() or contact.username
+            contact.first_name = data.get('first_name', '').strip() or contact.first_name
+            contact.last_name = data.get('last_name', '').strip() or contact.last_name
+            contact.language_code = (
+                data.get('language_code', '').strip() or contact.language_code
+            )
+            if data.get('has_token'):
+                contact.came_with_token = True  # sticky
+            contact.start_count += 1
+            contact.save()
+
+        return JsonResponse({'status': 'ok'})
 
 
 class CheckTokenView(View):
