@@ -133,6 +133,10 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SITE_URL = config('SITE_URL', default='https://ochiqkurs.uz')
 # Search Console verification token (rendered as <meta name="google-site-verification">).
 GOOGLE_SITE_VERIFICATION = config('GOOGLE_SITE_VERIFICATION', default='')
+# Search Console "HTML file" verification: the filename Google gives you (e.g.
+# google<hash>.html). When set, that file is served at the site root with the
+# expected `google-site-verification: <filename>` body.
+GOOGLE_VERIFICATION_FILE = config('GOOGLE_VERIFICATION_FILE', default='')
 # Cloudflare Web Analytics beacon token (privacy-friendly, cookieless).
 CLOUDFLARE_ANALYTICS_TOKEN = config('CLOUDFLARE_ANALYTICS_TOKEN', default='')
 
