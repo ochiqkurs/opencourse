@@ -25,6 +25,13 @@ def robots_txt(request):
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
 
 
+def google_verification_file(request):
+    # Google Search Console "HTML file" verification: serve the expected body at
+    # the filename Google issued (configured via GOOGLE_VERIFICATION_FILE).
+    name = settings.GOOGLE_VERIFICATION_FILE
+    return HttpResponse(f"google-site-verification: {name}\n", content_type="text/html")
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('users/', include('users.urls')),
@@ -39,6 +46,13 @@ urlpatterns = [
     path('robots.txt', robots_txt, name='robots'),
     path('', HomeView.as_view(), name='home'),
 ]
+
+# Serve the Google Search Console HTML verification file at the site root when a
+# filename is configured (keeps the token out of source).
+if settings.GOOGLE_VERIFICATION_FILE:
+    urlpatterns.insert(
+        -1, path(settings.GOOGLE_VERIFICATION_FILE, google_verification_file)
+    )
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

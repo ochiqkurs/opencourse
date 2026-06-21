@@ -575,3 +575,14 @@ class SeoTests(TestCase):
     def test_canonical_uses_site_url(self):
         resp = self.client.get(reverse('home'))
         self.assertIn('https://ochiqkurs.uz/', resp.content.decode())
+
+    @override_settings(GOOGLE_VERIFICATION_FILE='googletest123.html')
+    def test_google_verification_file_view(self):
+        # The route is registered at import time from the env, so exercise the
+        # view directly; it must echo the configured filename as the body.
+        from django.test import RequestFactory
+        from config.urls import google_verification_file
+        resp = google_verification_file(RequestFactory().get('/googletest123.html'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content.decode().strip(),
+                         'google-site-verification: googletest123.html')
