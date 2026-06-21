@@ -1,6 +1,6 @@
-{# SEO meta tags. Values come from the `seo` context processor (defaults) and
-   may be overridden per-page by view context (meta_description, og_title,
-   og_image, og_type). #}
+{% comment %}SEO meta tags. Values come from the `seo` context processor (defaults)
+and may be overridden per-page by view context (meta_description, og_title,
+og_image, og_type).{% endcomment %}
 <meta name="description" content="{{ meta_description }}">
 <link rel="canonical" href="{{ canonical_url }}">
 

@@ -576,6 +576,12 @@ class SeoTests(TestCase):
         resp = self.client.get(reverse('home'))
         self.assertIn('https://ochiqkurs.uz/', resp.content.decode())
 
+    def test_seo_meta_comment_not_leaked(self):
+        # A multi-line {# #} comment is NOT stripped by Django and leaks as text;
+        # the seo_meta include must use {% comment %} so nothing renders.
+        resp = self.client.get(reverse('home'))
+        self.assertNotIn('SEO meta tags', resp.content.decode())
+
     @override_settings(GOOGLE_VERIFICATION_FILE='googletest123.html')
     def test_google_verification_file_view(self):
         # The route is registered at import time from the env, so exercise the
