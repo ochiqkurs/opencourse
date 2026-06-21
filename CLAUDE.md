@@ -81,9 +81,15 @@ TELEGRAM_BOT_USERNAME=ochiqkurs_bot
 SECURE_SSL_REDIRECT=True
 SESSION_COOKIE_SECURE=True
 CSRF_COOKIE_SECURE=True
+
+# SEO / analytics (all optional — sensible defaults)
+SITE_URL=https://ochiqkurs.uz   # canonical origin for absolute URLs (canonical, OG, sitemap)
+GOOGLE_SITE_VERIFICATION=        # Search Console "HTML tag" method → <meta> token
+GOOGLE_VERIFICATION_FILE=        # Search Console "HTML file" method → filename served at site root
+CLOUDFLARE_ANALYTICS_TOKEN=      # only for manual Web Analytics; leave EMPTY when using Cloudflare "automatic setup"
 ```
 
-For local dev, copy `.env.example` to `.env` (not committed).
+For local dev, copy `.env.example` to `.env` (not committed). The SEO/analytics vars are optional: `SITE_URL` defaults to `https://ochiqkurs.uz`; the three tokens render nothing when empty. **Prod uses the HTML-file method** (`GOOGLE_VERIFICATION_FILE` set) and **Cloudflare Web Analytics "automatic setup"** (so `CLOUDFLARE_ANALYTICS_TOKEN` stays empty — automatic injects the beacon at the edge; setting it too would double-count).
 
 ---
 

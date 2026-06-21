@@ -371,8 +371,12 @@ Organic-search foundation, wired so every page ships rich metadata with no per-p
   - Course detail → `Course` (provider, `inLanguage=uz`, image, instructor, free `Offer`, `aggregateRating` when `rating_count`).
   - Lesson detail → `VideoObject` for video lessons (thumbnail, embedUrl, ISO-8601 `duration`).
 - **Sitemap** at `/sitemap.xml` (`learning/sitemaps.py`, `SITEMAPS`): static views, published courses (`lastmod=published_at`), categories, learning paths, instructors. Domain comes from the request host (no `django.contrib.sites`); `protocol='https'`. Models expose `get_absolute_url()` for this.
-- **robots.txt** at `/robots.txt` (`robots_txt` view in `config/urls.py`): disallows `/admin/`, `/api/`, `/users/`; advertises the sitemap.
-- **Measurement**: Google Search Console verification meta (`GOOGLE_SITE_VERIFICATION`) and Cloudflare Web Analytics beacon (`CLOUDFLARE_ANALYTICS_TOKEN`) — both env-gated, render only when set. After deploy: verify the domain in Search Console and submit `/sitemap.xml`.
+- **robots.txt** at `/robots.txt` (`robots_txt` view in `config/urls.py`): disallows `/admin/`, `/api/`, `/users/`; advertises the sitemap. (Cloudflare prepends its own managed/content-signal block ahead of ours on the live response.)
+- **Google site verification** — two supported methods, both env-gated:
+  - *HTML tag*: `GOOGLE_SITE_VERIFICATION` renders a `<meta name="google-site-verification">`.
+  - *HTML file* (**what prod uses**): `GOOGLE_VERIFICATION_FILE` is the filename Google issues (e.g. `google<hash>.html`); when set, `config.urls.google_verification_file` serves it at the site root with the expected `google-site-verification: <filename>` body. The route is registered at import time only when the env var is set (token stays out of source).
+- **Cloudflare Web Analytics**: the site is proxied through Cloudflare, so it uses **"automatic setup"** — Cloudflare injects the beacon at the edge, **no token needed**. `CLOUDFLARE_ANALYTICS_TOKEN` is therefore left **empty** in prod (it would render our own beacon and double-count). It exists only for a non-proxied/manual setup.
+- **Live state** (set up 2026-06-21): domain verified in Search Console via the HTML-file method, `/sitemap.xml` submitted (Success), Cloudflare Web Analytics on automatic. After future deploys nothing extra is needed; the sitemap/verification/analytics stay live on defaults + the prod `.env` vars.
 
 ---
 
