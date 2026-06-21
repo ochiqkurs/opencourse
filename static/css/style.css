@@ -410,9 +410,11 @@ html[data-theme="dark"] {
 
 .nav-mobile-toggle { display: none; }
 @media (max-width: 900px) {
-  .navbar-nav .nav-only-desktop { display: none; }
+  .nav-only-desktop { display: none; }
   .navbar-search { display: none; }
   .nav-mobile-toggle { display: inline-grid; }
+  .navbar-inner { gap: 10px; padding: 0 14px; }
+  .navbar-right { gap: 6px; }
 }
 
 .mobile-drawer {
@@ -447,13 +449,14 @@ html[data-theme="dark"] {
 .layout { display: block; min-height: calc(100vh - var(--nav-h)); }
 .layout-with-sidebar {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 0;
   max-width: var(--container-wide);
   margin: 0 auto;
 }
+.layout-with-sidebar > * { min-width: 0; }
 @media (max-width: 1024px) {
-  .layout-with-sidebar { grid-template-columns: 1fr; }
+  .layout-with-sidebar { grid-template-columns: minmax(0, 1fr); }
 }
 
 main.content {
@@ -486,6 +489,8 @@ main.content-full {
     border-right: none; border-bottom: 1px solid var(--border);
   }
 }
+.sidebar-skill-title, .subskill-summary, .sidebar-lesson-item span { overflow-wrap: anywhere; }
+.sidebar-lesson-item a { min-width: 0; }
 .sidebar-header { margin-bottom: 18px; }
 .sidebar-back {
   display: inline-flex; align-items: center; gap: 4px;
@@ -1626,7 +1631,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 }
 .lesson-nav .ln-btn.ln-next { text-align: right; align-items: flex-end; }
 .lesson-nav .ln-btn .ln-meta { font-size: .72rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
-.lesson-nav .ln-btn .ln-title { font-weight: 700; font-size: .95rem; color: var(--text); }
+.lesson-nav .ln-btn .ln-title { font-weight: 700; font-size: .95rem; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
 
 /* Notes (now lives inside a tab panel) */
 .note-textarea {
@@ -1658,7 +1663,10 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   display: flex; gap: 0;
   border-bottom: 1px solid var(--border);
   margin-top: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.ld-tabs::-webkit-scrollbar { display: none; }
 .ld-tabs button {
   background: transparent;
   border: none;
@@ -1668,6 +1676,8 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   color: var(--muted);
   cursor: pointer;
   position: relative;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .ld-tabs button.active { color: var(--text); }
 .ld-tabs button.active::after {
@@ -1724,7 +1734,10 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   width: 100%;
   margin: 1em 0;
   font-size: .92em;
+  display: block;
+  overflow-x: auto;
 }
+.md-content { overflow-wrap: anywhere; }
 .md-content th, .md-content td {
   border: 1px solid var(--border);
   padding: 8px 12px;
@@ -2151,6 +2164,15 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 }
 .cert-paper .cert-course-line { margin-bottom: 30px; }
 .cert-paper .cert-course-name { font-weight: 700; color: var(--brand-800); }
+@media (max-width: 640px) {
+  .certificate-page { padding: 20px 10px; }
+  .cert-paper { padding: 36px 22px 30px; }
+  .cert-paper::before { inset: 8px; }
+  .cert-paper::after { inset: 12px; }
+  .cert-paper .cert-h1, .cert-paper .cert-name, .cert-paper .cert-course-name { overflow-wrap: anywhere; }
+  .cert-paper .cert-h1 { font-size: 1.6rem; }
+  .cert-paper .cert-name { font-size: 1.5rem; }
+}
 .cert-meta-row {
   position: relative; z-index: 1;
   display: flex; justify-content: space-between; align-items: flex-end;
@@ -2169,6 +2191,7 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .cert-actions {
   max-width: 980px; margin: 24px auto 0;
   display: flex; gap: 12px; justify-content: center;
+  flex-wrap: wrap;
 }
 @media print {
   .navbar, .site-footer, .cert-actions, .mobile-drawer { display: none !important; }
@@ -3176,10 +3199,12 @@ html[data-theme="dark"] .qa-ask textarea:focus { box-shadow: 0 0 0 3px rgba(16,1
 
 .quiz-history { margin-top: 32px; }
 .quiz-history h3 { font-size: 1.1rem; margin-bottom: 12px; }
+.quiz-history-table-wrap { overflow-x: auto; }
 .quiz-history-table { width: 100%; border-collapse: collapse; }
 .quiz-history-table th, .quiz-history-table td {
   padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
+  white-space: nowrap;
 }
 .quiz-history-table th { font-weight: 600; color: var(--text-muted); }
 
