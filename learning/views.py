@@ -12,9 +12,12 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
+from django.utils.text import Truncator
 from django.views import View
 
+from .context_processors import absolute_url
 from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
@@ -32,6 +35,103 @@ UZT = pytz.timezone('Asia/Tashkent')  # UTC+5
 
 def _today_uzt():
     return timezone.now().astimezone(UZT).date()
+
+
+def _meta_desc(*candidates, limit=160):
+    """First non-empty candidate, stripped of markup/whitespace and truncated to
+    ~`limit` chars for a clean <meta description>/og:description."""
+    for c in candidates:
+        if c:
+            text = ' '.join(strip_tags(str(c)).split())
+            if text:
+                return Truncator(text).chars(limit)
+    return ''
+
+
+def _course_jsonld(course):
+    """schema.org/Course structured data for rich search results."""
+    data = {
+        '@context': 'https://schema.org',
+        '@type': 'Course',
+        'name': course.title,
+        'description': _meta_desc(course.subtitle, course.description, course.title),
+        'inLanguage': 'uz',
+        'url': absolute_url(course.get_absolute_url()),
+        'provider': {
+            '@type': 'Organization',
+            'name': 'Ochiq Kurs',
+            'url': absolute_url('/'),
+        },
+        'isAccessibleForFree': True,
+        'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'UZS',
+                   'availability': 'https://schema.org/InStock'},
+    }
+    thumb = course.get_thumbnail_url()
+    if thumb:
+        data['image'] = absolute_url(thumb)
+    if course.instructor_name:
+        data['instructor'] = {'@type': 'Person', 'name': course.instructor_name}
+    if course.rating_count:
+        data['aggregateRating'] = {
+            '@type': 'AggregateRating',
+            'ratingValue': str(course.avg_rating),
+            'reviewCount': course.rating_count,
+            'bestRating': '5', 'worstRating': '1',
+        }
+    return data
+
+
+def _home_jsonld():
+    """WebSite (with a sitelinks search box) + Organization for the home page."""
+    search = absolute_url(reverse('learning:search'))
+    return [
+        {
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            'name': 'Ochiq Kurs',
+            'url': absolute_url('/'),
+            'inLanguage': 'uz',
+            'potentialAction': {
+                '@type': 'SearchAction',
+                'target': {
+                    '@type': 'EntryPoint',
+                    'urlTemplate': search + '?q={search_term_string}',
+                },
+                'query-input': 'required name=search_term_string',
+            },
+        },
+        {
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            'name': 'Ochiq Kurs',
+            'url': absolute_url('/'),
+        },
+    ]
+
+
+def _lesson_jsonld(lesson, course):
+    """schema.org/VideoObject for a video lesson — eligible for Google video
+    rich results. Returns None for non-video lessons."""
+    if lesson.lesson_type != 'video' or not lesson.youtube_video_id:
+        return None
+    vid = lesson.youtube_video_id
+    data = {
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject',
+        'name': lesson.title,
+        'description': _meta_desc(lesson.description, lesson.title),
+        'thumbnailUrl': f'https://img.youtube.com/vi/{vid}/hqdefault.jpg',
+        'embedUrl': f'https://www.youtube.com/embed/{vid}',
+        'url': absolute_url(lesson.get_absolute_url()),
+        'inLanguage': 'uz',
+    }
+    if course.published_at:
+        data['uploadDate'] = course.published_at.date().isoformat()
+    if lesson.duration_seconds:
+        # ISO-8601 duration, e.g. PT12M34S
+        m, s = divmod(int(lesson.duration_seconds), 60)
+        data['duration'] = f'PT{m}M{s}S'
+    return data
 
 
 def _course_card_annotations(qs):
@@ -213,6 +313,7 @@ class HomeView(View):
             'wishlist_ids': _user_wishlist_ids(request.user),
             'hero_course_thumbnail': hero_course_thumbnail,
             'hero_course_title': hero_course_title,
+            'jsonld': _home_jsonld(),
         })
 
 
@@ -292,6 +393,11 @@ class CategoryDetailView(View):
             'courses': list(courses),
             'categories': categories,
             'wishlist_ids': _user_wishlist_ids(request.user),
+            'meta_description': _meta_desc(
+                category.description,
+                f"{category.name} yo'nalishidagi o'zbek tilidagi bepul onlayn kurslar.",
+            ),
+            'og_title': f"{category.name} kurslari — Ochiq Kurs",
         })
 
 
@@ -477,6 +583,12 @@ class CourseDetailView(View):
             'description_html': mark_safe(render_markdown(course.description)) if course.description else '',
             'announcements': announcements,
             'preview_lesson': preview_lesson,
+            # SEO
+            'meta_description': _meta_desc(course.subtitle, course.description, course.title),
+            'og_title': course.title,
+            'og_image': absolute_url(course.get_thumbnail_url()),
+            'og_type': 'website',
+            'jsonld': _course_jsonld(course),
         }
         return render(request, self.template_name, ctx)
 
@@ -682,6 +794,12 @@ class LessonDetailView(View):
             'active_attempt': active_attempt,
             'active_questions': active_questions,
             'active_answered_ids_json': active_answered_ids_json,
+            # SEO
+            'meta_description': _meta_desc(lesson.description, course.subtitle, course.title),
+            'og_title': f'{lesson.title} — {course.title}',
+            'og_image': absolute_url(course.get_thumbnail_url()),
+            'og_type': 'video.other' if lesson.lesson_type == 'video' else 'article',
+            'jsonld': _lesson_jsonld(lesson, course),
         }
         return render(request, self.template_name, ctx)
 
@@ -1426,7 +1544,7 @@ class LearningPathDetailView(View):
         # it is claimed via the POST-only /sertifikat/ endpoint (learning_path_certificate).
         path_complete = total_courses > 0 and completed_courses >= total_courses
 
-        return render(request, self.template_name, {
+        ctx = {
             'path_obj': path_obj,
             'courses_data': courses_data,
             'is_enrolled': is_enrolled,
@@ -1435,7 +1553,11 @@ class LearningPathDetailView(View):
             'completed_courses': completed_courses,
             'path_complete': path_complete,
             'overall_percent': int(completed_courses / total_courses * 100) if total_courses else 0,
-        })
+            'meta_description': _meta_desc(path_obj.description, path_obj.title),
+            'og_title': f'{path_obj.title} — Ochiq Kurs',
+            'og_image': absolute_url(path_obj.thumbnail.url) if path_obj.thumbnail else None,
+        }
+        return render(request, self.template_name, ctx)
 
 
 @login_required
@@ -1540,4 +1662,9 @@ class InstructorDetailView(View):
             'total_lessons': total_lessons,
             'avg_rating': round(avg_rating, 1),
             'wishlist_ids': _user_wishlist_ids(request.user),
+            'meta_description': _meta_desc(
+                bio, f"{display_name} — Ochiq Kursdagi o'qituvchi. {total_courses} ta kurs, {total_lessons} ta dars."
+            ),
+            'og_title': f'{display_name} — Ochiq Kurs',
+            'og_image': profile.photo_url if profile and profile.photo_url else None,
         })

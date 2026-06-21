@@ -507,3 +507,71 @@ class LocalizeAvatarTests(TestCase):
 
     def test_empty_returns_empty(self):
         self.assertEqual(_localize_avatar(''), '')
+
+
+# --- SEO foundation -------------------------------------------------------
+_SEO_OVERRIDES = dict(
+    SITE_URL='https://ochiqkurs.uz',
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+
+
+@override_settings(**_SEO_OVERRIDES)
+class SeoTests(TestCase):
+    def setUp(self):
+        self.course = Course.objects.create(
+            title='Python Asoslari', slug='python-asoslari',
+            subtitle='Noldan Python', status='published',
+        )
+        self.module = Module.objects.create(title='M', slug='m', course=self.course, order=0)
+        self.lesson = Lesson.objects.create(
+            title='Kirish', slug='kirish', module=self.module, lesson_type='video',
+            youtube_video_id='abc123', duration_seconds=754, order=0,
+        )
+
+    def test_sitemap_lists_published_course(self):
+        resp = self.client.get('/sitemap.xml')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn('/malaka/python-asoslari/', body)
+        self.assertIn('https://', body)
+
+    def test_robots_txt(self):
+        resp = self.client.get('/robots.txt')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'text/plain')
+        body = resp.content.decode()
+        self.assertIn('Sitemap: https://ochiqkurs.uz/sitemap.xml', body)
+        self.assertIn('Disallow: /admin/', body)
+
+    def test_course_detail_has_og_and_jsonld(self):
+        resp = self.client.get(reverse('learning:course_detail', args=[self.course.slug]))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('property="og:title"', html)
+        self.assertIn('property="og:image"', html)
+        self.assertIn('rel="canonical"', html)
+        self.assertIn('application/ld+json', html)
+        self.assertIn('"@type": "Course"', html)
+
+    def test_lesson_detail_has_videoobject_jsonld(self):
+        self.client.force_login(User.objects.create_user('u', password='pw-12345!x'))
+        resp = self.client.get(self.lesson.get_absolute_url())
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('"@type": "VideoObject"', html)
+        self.assertIn('PT12M34S', html)
+
+    def test_home_has_website_jsonld(self):
+        resp = self.client.get(reverse('home'))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('"@type": "WebSite"', html)
+        self.assertIn('SearchAction', html)
+
+    def test_canonical_uses_site_url(self):
+        resp = self.client.get(reverse('home'))
+        self.assertIn('https://ochiqkurs.uz/', resp.content.decode())

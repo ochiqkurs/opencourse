@@ -1,8 +1,23 @@
+import json
+
 from django import template
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 register = template.Library()
+
+
+@register.simple_tag
+def jsonld(data):
+    """Render a dict as a <script type="application/ld+json"> block.
+
+    Escapes '<' so an embedded '</script>' (or any tag) in user-supplied strings
+    can't break out of the script element. Used for schema.org structured data.
+    """
+    if not data:
+        return ''
+    payload = json.dumps(data, ensure_ascii=False).replace('<', '\\u003c')
+    return mark_safe(f'<script type="application/ld+json">{payload}</script>')
 
 
 @register.filter

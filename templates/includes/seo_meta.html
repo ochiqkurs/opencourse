@@ -1,0 +1,22 @@
+{# SEO meta tags. Values come from the `seo` context processor (defaults) and
+   may be overridden per-page by view context (meta_description, og_title,
+   og_image, og_type). #}
+<meta name="description" content="{{ meta_description }}">
+<link rel="canonical" href="{{ canonical_url }}">
+
+{# Open Graph #}
+<meta property="og:site_name" content="Ochiq Kurs">
+<meta property="og:locale" content="uz_UZ">
+<meta property="og:type" content="{{ og_type }}">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ meta_description }}">
+<meta property="og:url" content="{{ canonical_url }}">
+<meta property="og:image" content="{% firstof og_image default_og_image %}">
+
+{# Twitter #}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ meta_description }}">
+<meta name="twitter:image" content="{% firstof og_image default_og_image %}">
+
+{% if GOOGLE_SITE_VERIFICATION %}<meta name="google-site-verification" content="{{ GOOGLE_SITE_VERIFICATION }}">{% endif %}

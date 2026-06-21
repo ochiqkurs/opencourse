@@ -4,6 +4,8 @@
 
 {% block title %}{{ lesson.title }} — {{ course.title }}{% endblock %}
 
+{% block extra_head %}{% jsonld jsonld %}{% endblock %}
+
 {% block content %}
 
 <nav class="breadcrumb">

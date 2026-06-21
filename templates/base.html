@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#10B981">
   <link rel="icon" href="{% static 'images/favicon.png' %}" type="image/png">
   <title>{% block title %}Ochiq Kurs — O'zbekcha onlayn ta'lim platformasi{% endblock %}</title>
-  <meta name="description" content="O'zbek tilidagi premium onlayn kurslar. Dasturlash, dizayn, ish hayoti va boshqa ko'plab yo'nalishlar bo'yicha video darslar.">
+  {% include "includes/seo_meta.html" %}
 
   <!-- Theme bootstrap (prevents flash) -->
   <script>
@@ -289,5 +289,9 @@
   </script>
   {% endif %}
   {% block extra_body %}{% endblock %}
+  {% if CLOUDFLARE_ANALYTICS_TOKEN %}
+  <!-- Cloudflare Web Analytics (privacy-friendly, cookieless) -->
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "{{ CLOUDFLARE_ANALYTICS_TOKEN }}"}'></script>
+  {% endif %}
 </body>
 </html>

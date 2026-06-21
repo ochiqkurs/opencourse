@@ -359,6 +359,23 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 
 ---
 
+## SEO / Discoverability
+
+Organic-search foundation, wired so every page ships rich metadata with no per-page boilerplate.
+
+- **Canonical origin**: `SITE_URL` (env, default `https://ochiqkurs.uz`) is the deterministic base for all absolute URLs — set so canonical/OG links don't depend on the request host or proxy scheme. `SECURE_PROXY_SSL_HEADER` lets `request.scheme` resolve to `https` behind Cloudflare.
+- **Context processor** `learning.context_processors.seo` injects site-wide defaults (`meta_description`, `og_title`, `og_image`, `og_type`, `canonical_url`, verification/analytics tokens) into every template. Views override the per-page values by putting the same keys in their own context. `absolute_url(path)` turns a relative/media path into a `SITE_URL`-rooted URL and leaves already-absolute URLs (e.g. YouTube thumbs) untouched.
+- **Meta tags**: `templates/includes/seo_meta.html` (included from `base.html` `<head>`) renders the description, `<link rel="canonical">`, Open Graph, and Twitter `summary_large_image` cards. `og:image` defaults to `course-hero-placeholder.png`; course/lesson pages use `Course.get_thumbnail_url()` made absolute.
+- **JSON-LD** via the `{% jsonld data %}` tag (`learning_extras.py`, escapes `<` so user strings can't break out of the `<script>`). Built in views and rendered in each template's `{% block extra_head %}`:
+  - Home → `WebSite` (with a `SearchAction` sitelinks search box pointing at `/malaka/qidiruv/?q=`) + `Organization`.
+  - Course detail → `Course` (provider, `inLanguage=uz`, image, instructor, free `Offer`, `aggregateRating` when `rating_count`).
+  - Lesson detail → `VideoObject` for video lessons (thumbnail, embedUrl, ISO-8601 `duration`).
+- **Sitemap** at `/sitemap.xml` (`learning/sitemaps.py`, `SITEMAPS`): static views, published courses (`lastmod=published_at`), categories, learning paths, instructors. Domain comes from the request host (no `django.contrib.sites`); `protocol='https'`. Models expose `get_absolute_url()` for this.
+- **robots.txt** at `/robots.txt` (`robots_txt` view in `config/urls.py`): disallows `/admin/`, `/api/`, `/users/`; advertises the sitemap.
+- **Measurement**: Google Search Console verification meta (`GOOGLE_SITE_VERIFICATION`) and Cloudflare Web Analytics beacon (`CLOUDFLARE_ANALYTICS_TOKEN`) — both env-gated, render only when set. After deploy: verify the domain in Search Console and submit `/sitemap.xml`.
+
+---
+
 ## Domain Language
 
 | Term | Meaning |

@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sitemaps',
     # local
     'users.apps.UsersConfig',
     'learning.apps.LearningConfig',
@@ -48,6 +49,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'learning.context_processors.seo',
             ],
         },
     },
@@ -121,6 +123,18 @@ CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
 SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+# Behind Cloudflare/nginx SSL termination: trust the forwarded-proto header so
+# request.scheme and the sitemap protocol resolve to https.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# --- SEO / discoverability ---
+# Canonical origin used to build absolute URLs (canonical links, OG/Twitter
+# images, JSON-LD) deterministically rather than relying on the request host.
+SITE_URL = config('SITE_URL', default='https://ochiqkurs.uz')
+# Search Console verification token (rendered as <meta name="google-site-verification">).
+GOOGLE_SITE_VERIFICATION = config('GOOGLE_SITE_VERIFICATION', default='')
+# Cloudflare Web Analytics beacon token (privacy-friendly, cookieless).
+CLOUDFLARE_ANALYTICS_TOKEN = config('CLOUDFLARE_ANALYTICS_TOKEN', default='')
 
 # --- Auth redirects ---
 LOGIN_URL = '/users/login/'

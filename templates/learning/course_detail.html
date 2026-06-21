@@ -3,6 +3,8 @@
 
 {% block title %}{{ course.title }} – Ochiq Kurs{% endblock %}
 
+{% block extra_head %}{% jsonld jsonld %}{% endblock %}
+
 {% block content %}
 <section class="course-hero">
   <div class="course-hero-inner">

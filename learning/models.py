@@ -33,6 +33,10 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('learning:category_detail', args=[self.slug])
+
 
 class Course(models.Model):
     LEVEL_CHOICES = [
@@ -95,6 +99,10 @@ class Course(models.Model):
 
     def __str__(self):
         return self.title
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('learning:course_detail', args=[self.slug])
 
     def save(self, *args, **kwargs):
         # Stamp published_at the first time a course goes live so the
@@ -198,6 +206,12 @@ class Lesson(models.Model):
 
     def __str__(self):
         return f"{self.module.title} – {self.title}"
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('learning:lesson_detail', args=[
+            self.module.course.slug, self.module.slug, self.slug,
+        ])
 
 
 class LessonProgress(models.Model):
@@ -517,6 +531,10 @@ class LearningPath(models.Model):
 
     def __str__(self):
         return self.title
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('learning:learning_path_detail', args=[self.slug])
 
 
 class LearningPathCourse(models.Model):
