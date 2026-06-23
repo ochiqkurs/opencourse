@@ -39,9 +39,14 @@ jobs:
             # broken release surfaces instead of reporting success on a dead site.
             ok=0
             for i in $(seq 1 10); do
+              # `|| code=000` (not `|| echo 000` inside $()): a failed curl prints
+              # its own "000" AND exits non-zero, so the old in-subshell `|| echo
+              # 000` appended a second "000" → "000000", which slipped past the
+              # `!= "000"` guard and false-passed. Normalize to a single "000",
+              # then require a real HTTP code (>=100) so 000 fails correctly.
               code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: ochiqkurs.uz" \
-                     --unix-socket ~/opencourse/gunicorn.sock http://localhost/ || echo 000)
-              if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+                     --unix-socket ~/opencourse/gunicorn.sock http://localhost/) || code=000
+              if [ "$code" -ge 100 ] && [ "$code" -lt 500 ]; then
                 ok=1; echo "Health check OK (HTTP $code)"; break
               fi
               echo "Health check attempt $i/10: got $code"; sleep 2
