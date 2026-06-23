@@ -21,9 +21,9 @@ from .context_processors import absolute_url
 from .models import (
     Lesson, LessonProgress, LessonView, Note, Course, Module,
     Category, Enrollment, CourseReview, Certificate,
-    Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
+    Wishlist, LessonQuestion, Announcement,
     Quiz, QuizAttempt, QuizAnswer, QuizQuestion, QuizChoice,
-    LearningPath, LearningPathCourse, LearningPathEnrollment, LearningPathCertificate,
+    LearningPath, LearningPathEnrollment, LearningPathCertificate,
     VideoBookmark,
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
@@ -159,6 +159,81 @@ def _user_wishlist_ids(user):
 # / (home page — public)
 # ---------------------------------------------------------------------------
 
+def _personalized_home(user, all_courses, published):
+    """Authenticated-user home-page sections: in-progress courses to continue,
+    recent activity, and category-based recommendations. All empty for anonymous
+    users. `all_courses` is the pre-annotated published list reused to avoid
+    refetching; `published` is the base queryset for recommendations."""
+    continue_learning = []
+    recommended = []
+    recent_activity = []
+
+    if user.is_authenticated:
+        enrolled_ids = set(
+            Enrollment.objects.filter(user=user)
+            .values_list('course_id', flat=True)
+        )
+        enrolled_courses = [c for c in all_courses if c.id in enrolled_ids]
+
+        # Completed-lesson counts for every enrolled course in one query
+        # (was a per-course COUNT inside the loop — an N+1).
+        completed_map = dict(
+            LessonProgress.objects
+            .filter(user=user, is_completed=True, lesson__module__course_id__in=enrolled_ids)
+            .values_list('lesson__module__course_id')
+            .annotate(c=Count('id'))
+        )
+
+        for course in enrolled_courses:
+            total = course.lesson_count or 0
+            done = completed_map.get(course.id, 0)
+            percent = int(done / total * 100) if total else 0
+            if 0 < percent < 100:
+                continue_learning.append({
+                    'course': course,
+                    'percent': percent,
+                    'done': done,
+                    'total': total,
+                })
+            if len(continue_learning) >= 3:
+                break
+
+        # Recent activity
+        recent_raw = list(
+            LessonView.objects.filter(user=user)
+            .select_related('lesson__module__course')
+            .order_by('-first_seen_at')[:5]
+        )
+        recent_activity = [
+            {
+                'lesson': rv.lesson,
+                'course': rv.lesson.module.course,
+                'viewed_on': rv.viewed_on,
+            }
+            for rv in recent_raw
+        ]
+
+        # Category-based recommendations
+        enrolled_cat_ids = set(
+            Course.objects.filter(id__in=enrolled_ids)
+            .values_list('category_id', flat=True)
+        )
+        if enrolled_cat_ids:
+            recommended = list(
+                _course_card_annotations(
+                    published.filter(category_id__in=enrolled_cat_ids)
+                    .exclude(id__in=enrolled_ids)
+                    .select_related('category')
+                ).order_by('-avg_rating', '-rating_count')[:6]
+            )
+
+    return {
+        'continue_learning': continue_learning,
+        'recent_activity': recent_activity,
+        'recommended': recommended,
+    }
+
+
 class HomeView(View):
     template_name = 'home.html'
 
@@ -223,69 +298,7 @@ class HomeView(View):
             [:4]
         )
 
-        # ── Personalized (authenticated users) ──
-        continue_learning = []
-        recommended = []
-        recent_activity = []
-
-        if user.is_authenticated:
-            enrolled_ids = set(
-                Enrollment.objects.filter(user=user)
-                .values_list('course_id', flat=True)
-            )
-            enrolled_courses = [c for c in all_courses if c.id in enrolled_ids]
-
-            # Completed-lesson counts for every enrolled course in one query
-            # (was a per-course COUNT inside the loop — an N+1).
-            completed_map = dict(
-                LessonProgress.objects
-                .filter(user=user, is_completed=True, lesson__module__course_id__in=enrolled_ids)
-                .values_list('lesson__module__course_id')
-                .annotate(c=Count('id'))
-            )
-
-            for course in enrolled_courses:
-                total = course.lesson_count or 0
-                done = completed_map.get(course.id, 0)
-                percent = int(done / total * 100) if total else 0
-                if 0 < percent < 100:
-                    continue_learning.append({
-                        'course': course,
-                        'percent': percent,
-                        'done': done,
-                        'total': total,
-                    })
-                if len(continue_learning) >= 3:
-                    break
-
-            # Recent activity
-            recent_raw = list(
-                LessonView.objects.filter(user=user)
-                .select_related('lesson__module__course')
-                .order_by('-first_seen_at')[:5]
-            )
-            recent_activity = [
-                {
-                    'lesson': rv.lesson,
-                    'course': rv.lesson.module.course,
-                    'viewed_on': rv.viewed_on,
-                }
-                for rv in recent_raw
-            ]
-
-            # Category-based recommendations
-            enrolled_cat_ids = set(
-                Course.objects.filter(id__in=enrolled_ids)
-                .values_list('category_id', flat=True)
-            )
-            if enrolled_cat_ids:
-                recommended = list(
-                    _course_card_annotations(
-                        published.filter(category_id__in=enrolled_cat_ids)
-                        .exclude(id__in=enrolled_ids)
-                        .select_related('category')
-                    ).order_by('-avg_rating', '-rating_count')[:6]
-                )
+        personalized = _personalized_home(user, all_courses, published)
 
         # Hero card thumbnail: the top featured course (falls back to the newest),
         # instead of a hardcoded course slug.
@@ -307,9 +320,7 @@ class HomeView(View):
             'global_announcements': global_announcements,
             'category_strips': category_strips,
             'learning_paths': learning_paths,
-            'continue_learning': continue_learning,
-            'recent_activity': recent_activity,
-            'recommended': recommended,
+            **personalized,
             'wishlist_ids': _user_wishlist_ids(request.user),
             'hero_course_thumbnail': hero_course_thumbnail,
             'hero_course_title': hero_course_title,
@@ -636,6 +647,77 @@ class ModuleDetailView(View):
 # /malaka/<course_slug>/<module_slug>/<lesson_slug>/
 # ---------------------------------------------------------------------------
 
+def _adjacent_lessons(course, module, lesson):
+    """Return (prev_lesson, next_lesson) for the lesson, crossing module
+    boundaries: falls through to the last lesson of the previous module / the
+    first lesson of the next module when the lesson is at an edge of its own."""
+    sibling_lessons = list(module.lessons.order_by('order'))
+    current_index = next(
+        (i for i, l in enumerate(sibling_lessons) if l.id == lesson.id), None
+    )
+    prev_lesson = sibling_lessons[current_index - 1] if current_index and current_index > 0 else None
+    next_lesson = sibling_lessons[current_index + 1] if current_index is not None and current_index < len(sibling_lessons) - 1 else None
+
+    if not next_lesson:
+        next_module = course.modules.filter(order__gt=module.order).order_by('order').first()
+        if next_module:
+            next_lesson = next_module.lessons.order_by('order').first()
+    if not prev_lesson:
+        prev_module = course.modules.filter(order__lt=module.order).order_by('-order').first()
+        if prev_module:
+            prev_lesson = prev_module.lessons.order_by('-order').first()
+
+    return prev_lesson, next_lesson
+
+
+def _quiz_context(lesson, user):
+    """Context for a standalone quiz-type lesson: per-quiz metadata (attempt
+    history, best score, attempts remaining) plus, if the user has an unfinished
+    attempt, the `active_*` fields that render it inline. Empty for non-quiz
+    lessons or anonymous users."""
+    quizzes_with_meta = []
+    active_quiz = active_attempt = active_questions = None
+    active_answered_ids_json = '[]'
+    if lesson.lesson_type == 'quiz' and user.is_authenticated:
+        for quiz in lesson.quizzes.all():
+            user_attempts = list(
+                quiz.attempts.filter(user=user).order_by('-started_at')
+            )
+            # History shows finished attempts only; an in-progress one isn't a result.
+            past_attempts = [a for a in user_attempts if a.completed_at is not None][:10]
+            best_attempt = max(past_attempts, key=lambda a: a.percentage()) if past_attempts else None
+            attempts_remaining = -1
+            if quiz.max_attempts > 0:
+                used_attempts = sum(1 for a in user_attempts if a.completed_at is not None)
+                attempts_remaining = max(quiz.max_attempts - used_attempts, 0)
+            quizzes_with_meta.append({
+                'quiz': quiz,
+                'questions_count': quiz.questions.count(),
+                'past_attempts': past_attempts,
+                'best_attempt': best_attempt,
+                'attempts_remaining': attempts_remaining,
+            })
+            if active_attempt is None:
+                in_progress = next((a for a in user_attempts if a.completed_at is None), None)
+                if in_progress:
+                    active_quiz = quiz
+                    active_attempt = in_progress
+                    active_questions = list(
+                        quiz.questions.prefetch_related('choices').order_by('order')
+                    )
+                    active_answered_ids_json = json.dumps(
+                        list(in_progress.answers.values_list('question_id', flat=True))
+                    )
+
+    return {
+        'quizzes_with_meta': quizzes_with_meta,
+        'active_quiz': active_quiz,
+        'active_attempt': active_attempt,
+        'active_questions': active_questions,
+        'active_answered_ids_json': active_answered_ids_json,
+    }
+
+
 class LessonDetailView(View):
     template_name = 'learning/lesson_detail.html'
 
@@ -667,25 +749,7 @@ class LessonDetailView(View):
             .order_by('-created_at')[:30]
         )
 
-        sibling_lessons = list(module.lessons.order_by('order'))
-        current_index = next(
-            (i for i, l in enumerate(sibling_lessons) if l.id == lesson.id), None
-        )
-        prev_lesson = sibling_lessons[current_index - 1] if current_index and current_index > 0 else None
-        next_lesson = sibling_lessons[current_index + 1] if current_index is not None and current_index < len(sibling_lessons) - 1 else None
-
-        if not next_lesson:
-            next_module = course.modules.filter(order__gt=module.order).order_by('order').first()
-            if next_module:
-                nl = next_module.lessons.order_by('order').first()
-                if nl:
-                    next_lesson = nl
-        if not prev_lesson:
-            prev_module = course.modules.filter(order__lt=module.order).order_by('-order').first()
-            if prev_module:
-                pl = prev_module.lessons.order_by('-order').first()
-                if pl:
-                    prev_lesson = pl
+        prev_lesson, next_lesson = _adjacent_lessons(course, module, lesson)
 
         sidebar_modules = course.modules.prefetch_related('lessons').order_by('order')
 
@@ -722,45 +786,7 @@ class LessonDetailView(View):
                 .order_by('timestamp_seconds')
             )
 
-        # Quizzes — only standalone quiz-type lessons surface a quiz now.
-        # Taken inline: an in-progress attempt renders its questions in place of
-        # the hero/start screen (see `active_*` below).
-        quizzes_with_meta = []
-        active_quiz = active_attempt = active_questions = None
-        active_answered_ids_json = '[]'
-        if lesson.lesson_type == 'quiz' and request.user.is_authenticated:
-            for quiz in lesson.quizzes.all():
-                questions_count = quiz.questions.count()
-                user_attempts = list(
-                    quiz.attempts.filter(user=request.user).order_by('-started_at')
-                )
-                # History shows finished attempts only; an in-progress one isn't a result.
-                past_attempts = [a for a in user_attempts if a.completed_at is not None][:10]
-                best_attempt = None
-                if past_attempts:
-                    best_attempt = max(past_attempts, key=lambda a: a.percentage())
-                attempts_remaining = -1
-                if quiz.max_attempts > 0:
-                    used_attempts = sum(1 for a in user_attempts if a.completed_at is not None)
-                    attempts_remaining = max(quiz.max_attempts - used_attempts, 0)
-                quizzes_with_meta.append({
-                    'quiz': quiz,
-                    'questions_count': questions_count,
-                    'past_attempts': past_attempts,
-                    'best_attempt': best_attempt,
-                    'attempts_remaining': attempts_remaining,
-                })
-                if active_attempt is None:
-                    in_progress = next((a for a in user_attempts if a.completed_at is None), None)
-                    if in_progress:
-                        active_quiz = quiz
-                        active_attempt = in_progress
-                        active_questions = list(
-                            quiz.questions.prefetch_related('choices').order_by('order')
-                        )
-                        active_answered_ids_json = json.dumps(
-                            list(in_progress.answers.values_list('question_id', flat=True))
-                        )
+        quiz_ctx = _quiz_context(lesson, request.user)
 
         ctx = {
             'course': course,
@@ -789,11 +815,7 @@ class LessonDetailView(View):
             'course_total': total_in_course,
             'announcements': announcements,
             'bookmarks': bookmarks,
-            'quizzes_with_meta': quizzes_with_meta,
-            'active_quiz': active_quiz,
-            'active_attempt': active_attempt,
-            'active_questions': active_questions,
-            'active_answered_ids_json': active_answered_ids_json,
+            **quiz_ctx,
             # SEO
             'meta_description': _meta_desc(lesson.description, course.subtitle, course.title),
             'og_title': f'{lesson.title} — {course.title}',

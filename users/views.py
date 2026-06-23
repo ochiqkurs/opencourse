@@ -9,12 +9,12 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.contrib.auth import login, update_session_auth_hash
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -27,13 +27,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from learning.models import (
     Course, Module, Lesson, LessonProgress, LessonView,
-    Enrollment, Certificate, Category,
+    Enrollment, Certificate,
 )
-from learning.forms import CourseForm, ModuleForm, LessonForm, CategoryForm
+from learning.forms import CourseForm, ModuleForm, LessonForm
 from .forms import (
     UserProfileForm, SetUsernamePasswordForm, UsernamePasswordLoginForm,
 )
-from .models import TelegramAuthToken, TelegramContact, TelegramProfile
+from .models import TelegramAuthToken, TelegramContact, TelegramProfile, UserProfile
 
 
 def _client_ip(request):
@@ -496,113 +496,105 @@ class CheckTokenView(View):
         return JsonResponse({'status': 'pending'})
 
 
+def _activity_heatmap(user):
+    """Build the GitHub-style activity graph for the profile: a {date: count} map
+    of distinct lessons watched per day over the last 365 days, plus the days
+    bucketed into Monday-aligned weeks for the template grid."""
+    # Use the project timezone (Asia/Tashkent) so the day buckets line up with
+    # how LessonView.viewed_on is stamped; date.today() would use server time.
+    since = timezone.localdate() - timedelta(days=364)
+    raw_activity = (
+        LessonView.objects
+        .filter(user=user, viewed_on__gte=since)
+        .values('viewed_on')
+        .annotate(lessons=Count('lesson', distinct=True))
+    )
+    activity_map = {str(row['viewed_on']): row['lessons'] for row in raw_activity}
+
+    today = timezone.localdate()
+    # 364 kun oldindan boshlab bugunga qadar
+    days = [today - timedelta(days=i) for i in range(364, -1, -1)]
+    # Boshini dushanbaga to'ldirish — None emas, balki alohida flag
+    start_weekday = days[0].weekday()  # 0=Dushanba, 6=Yakshanba
+    padded = [None] * start_weekday + days
+    # Haftalar ro'yxatiga bo'lish
+    weeks = [padded[i:i + 7] for i in range(0, len(padded), 7)]
+    return activity_map, weeks
+
+
+def _in_progress_courses(user):
+    """Courses the user has progress in, each annotated with completion percent
+    and the next unfinished lesson, most-recently-watched first."""
+    user_progress = list(
+        LessonProgress.objects
+        .filter(user=user)
+        .select_related('lesson__module__course')
+        .order_by('-last_watched_at')
+    )
+    # Group by course preserving most-recent-first order per course
+    course_data = {}  # course_id -> {'course', 'completed_ids', 'last_watched_at'}
+    for lp in user_progress:
+        course = lp.lesson.module.course
+        cid = course.id
+        if cid not in course_data:
+            course_data[cid] = {
+                'course': course,
+                'completed_ids': set(),
+                'last_watched_at': lp.last_watched_at,
+            }
+        if lp.is_completed:
+            course_data[cid]['completed_ids'].add(lp.lesson_id)
+
+    # Fetch lessons for every in-progress course in one query and group them,
+    # rather than issuing a per-course query inside the loop (an N+1).
+    lessons_by_course = {}
+    for lsn in (
+        Lesson.objects
+        .filter(module__course_id__in=course_data.keys())
+        .select_related('module')
+        .order_by('module__order', 'order')
+    ):
+        lessons_by_course.setdefault(lsn.module.course_id, []).append(lsn)
+
+    in_progress_courses = []
+    for cid, data in course_data.items():
+        course = data['course']
+        lessons = lessons_by_course.get(cid, [])
+        total_lessons = len(lessons)
+        completed_ids = data['completed_ids']
+        completed_lessons = len(completed_ids)
+        progress_percent = int(completed_lessons / total_lessons * 100) if total_lessons else 0
+
+        next_lesson = next((l for l in lessons if l.id not in completed_ids), None)
+
+        in_progress_courses.append({
+            'course_title': course.title,
+            'course_slug': course.slug,
+            'total_lessons': total_lessons,
+            'completed_lessons': completed_lessons,
+            'progress_percent': progress_percent,
+            'next_lesson_slug': next_lesson.slug if next_lesson else None,
+            'next_module_slug': next_lesson.module.slug if next_lesson else None,
+            'last_watched_at': data['last_watched_at'],
+        })
+
+    in_progress_courses.sort(key=lambda x: x['last_watched_at'], reverse=True)
+    return in_progress_courses
+
+
 class ProfileView(LoginRequiredMixin, View):
     template_name = 'users/profile.html'
 
     def _base_context(self, request):
-        from datetime import timedelta
-        from django.db.models import Count
-        from users.models import UserProfile
-
         user = request.user
-
-        user_lesson_views = LessonView.objects.filter(user=user).count()
-
-        # Activity graph — last 365 days, counting distinct lessons watched per day.
-        # Use the project timezone (Asia/Tashkent) so the day buckets line up with
-        # how LessonView.viewed_on is stamped; date.today() would use server time.
-        since = timezone.localdate() - timedelta(days=364)
-        raw_activity = (
-            LessonView.objects
-            .filter(user=user, viewed_on__gte=since)
-            .values('viewed_on')
-            .annotate(lessons=Count('lesson', distinct=True))
-        )
-        activity_map = {
-            str(row['viewed_on']): row['lessons']
-            for row in raw_activity
-        }
-
-        today = timezone.localdate()
-        # 364 kun oldindan boshlab bugunga qadar
-        days = [today - timedelta(days=i) for i in range(364, -1, -1)]
-
-        # Boshini dushanbaga to'ldirish — None emas, balki alohida flag
-        start_weekday = days[0].weekday()  # 0=Dushanba, 6=Yakshanba
-        padded = [None] * start_weekday + days
-
-        # Haftalar ro'yxatiga bo'lish
-        weeks = [padded[i:i+7] for i in range(0, len(padded), 7)]
-
         profile, _ = UserProfile.objects.get_or_create(user=user)
-
-        # In-progress courses
-        user_progress = list(
-            LessonProgress.objects
-            .filter(user=user)
-            .select_related('lesson__module__course')
-            .order_by('-last_watched_at')
-        )
-        # Group by course preserving most-recent-first order per course
-        course_data = {}  # course_id -> {'course', 'completed_ids', 'last_watched_at'}
-        for lp in user_progress:
-            course = lp.lesson.module.course
-            cid = course.id
-            if cid not in course_data:
-                course_data[cid] = {
-                    'course': course,
-                    'completed_ids': set(),
-                    'last_watched_at': lp.last_watched_at,
-                }
-            if lp.is_completed:
-                course_data[cid]['completed_ids'].add(lp.lesson_id)
-
-        # Fetch lessons for every in-progress course in one query and group them,
-        # rather than issuing a per-course query inside the loop (an N+1).
-        lessons_by_course = {}
-        for lsn in (
-            Lesson.objects
-            .filter(module__course_id__in=course_data.keys())
-            .select_related('module')
-            .order_by('module__order', 'order')
-        ):
-            lessons_by_course.setdefault(lsn.module.course_id, []).append(lsn)
-
-        in_progress_courses = []
-        for cid, data in course_data.items():
-            course = data['course']
-            lessons = lessons_by_course.get(cid, [])
-            total_lessons = len(lessons)
-            completed_ids = data['completed_ids']
-            completed_lessons = len(completed_ids)
-            progress_percent = int(completed_lessons / total_lessons * 100) if total_lessons else 0
-
-            next_lesson = next((l for l in lessons if l.id not in completed_ids), None)
-
-            in_progress_courses.append({
-                'course_title': course.title,
-                'course_slug': course.slug,
-                'total_lessons': total_lessons,
-                'completed_lessons': completed_lessons,
-                'progress_percent': progress_percent,
-                'next_lesson_slug': next_lesson.slug if next_lesson else None,
-                'next_module_slug': next_lesson.module.slug if next_lesson else None,
-                'last_watched_at': data['last_watched_at'],
-            })
-
-        in_progress_courses.sort(key=lambda x: x['last_watched_at'], reverse=True)
-
-        certificates = list(
-            Certificate.objects.filter(user=user)
-            .select_related('course')
-            .order_by('-issued_at')
-        )
+        activity_map, weeks = _activity_heatmap(user)
 
         return {
             'form': UserProfileForm(instance=user),
             'is_admin': user.is_staff or user.is_superuser,
             'user': user,
-            'user_lesson_views': user_lesson_views,
+            'user_lesson_views': LessonView.objects.filter(user=user).count(),
             'user_completed_lessons': LessonProgress.objects.filter(user=user, is_completed=True).count(),
             'has_usable_password': user.has_usable_password(),
             'password_form': PasswordChangeForm(user) if user.has_usable_password() else SetPasswordForm(user),
@@ -610,8 +602,12 @@ class ProfileView(LoginRequiredMixin, View):
             'weeks': weeks,
             'current_streak': profile.live_streak,
             'longest_streak': profile.longest_streak,
-            'in_progress_courses': in_progress_courses,
-            'certificates': certificates,
+            'in_progress_courses': _in_progress_courses(user),
+            'certificates': list(
+                Certificate.objects.filter(user=user)
+                .select_related('course')
+                .order_by('-issued_at')
+            ),
             'enrollment_count': Enrollment.objects.filter(user=user).count(),
         }
 
