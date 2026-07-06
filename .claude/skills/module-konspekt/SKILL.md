@@ -51,11 +51,17 @@ don't teach material from later modules.
 
 ## SQL pattern
 
-Follow `~/tech/open-course/content-seed-2026-07-05/gen_articles_quizzes.py`
-(outside this repo, on the dev Mac): dollar-quote the
-Markdown (`$md$…$md$`), key by `module_id + slug`, compute `order` via
-`(SELECT COALESCE(MAX("order"),-1)+1 …)`, and when re-running delete dependents
-first (lessonprogress/lessonview/note/bookmark reference the lesson; raw SQL
-gets no ORM cascade). Apply locally, then render the page (both themes if
-layout-relevant) and check: markdown renders, code blocks highlighted, tables
-don't overflow, sidebar shows the lesson with the article icon.
+**Canonical pipeline**: `~/tech/open-course/content-seed-2026-07-05/seedlib.py`
+(outside this repo, on the dev Mac) — write a `konspekt_<kurs>.py` content
+module and let `seedlib.emit_course_sql` produce the SQL; see the
+`course-content` skill for the whole-course workflow and the contract. It
+handles dollar-quoting (`$md$…$md$`), keying by `module_id + slug`, computed
+`order` (konspekt = `MAX(video order)+1`, test after it at `+2`) and the
+dependency-ordered deletes (raw SQL gets no ORM cascade).
+
+Two rendering gotchas: bleach strips raw `<sub>/<sup>` in markdown — use
+Unicode (₂, ²); run the apostrophe pass (ASCII `'` → `’` between letters,
+**outside code fences only**) plus a `[а-яА-Я]` grep before generating. Apply
+locally, then render the page (both themes if layout-relevant) and check:
+markdown renders, code blocks highlighted, tables don't overflow, sidebar
+shows the lesson with the article icon.

@@ -51,14 +51,20 @@ WHERE qc.is_correct AND qq.question_type='multiple_choice'
 
 ## SQL pattern
 
-Follow `~/tech/open-course/content-seed-2026-07-05/gen_articles_quizzes.py`
-(outside this repo, on the dev Mac — the canonical
-generator): idempotent per-module delete first, inserts keyed by
-`module_id + slug` subselects, `order` computed as
-`(SELECT COALESCE(MAX("order"),-1)+1 ...)`. **Raw SQL bypasses Django's ORM
-cascade** — when re-running, delete dependents first (quizanswer m2m →
+**Canonical pipeline**: `~/tech/open-course/content-seed-2026-07-05/seedlib.py`
+(outside this repo, on the dev Mac) — author questions in a `konspekt_<kurs>.py`
+content module (`QUIZZES` dict, choices written **correct-first**; seedlib
+shuffles them with `random.Random(f"{mid}-{qi}")`) and let
+`seedlib.emit_course_sql` produce the SQL; see the `course-content` skill for
+the whole-course workflow. It emits idempotent per-module deletes first,
+inserts keyed by `module_id + slug` subselects, and computed `order`
+(test = `MAX(video)+2`, right after the konspekt). **Raw SQL bypasses
+Django's ORM cascade** — dependents are deleted in order (quizanswer m2m →
 quizanswer → quizattempt → quizchoice → quizquestion → quiz → lessonprogress /
-lessonview / note / videobookmark → lesson), exactly as that generator does.
+lessonview / note / videobookmark → lesson), exactly as seedlib does.
+
+If the course already has hand-made quizzes with real attempts, **keep them** —
+only fill gaps (e.g. empty explanations, guarded by `AND explanation = ''`).
 
 Apply locally with `psql -v ON_ERROR_STOP=1 -d ochiqkurs -f file.sql`; prod via
 `manage.py dbshell -- -f`. After applying, verify: every question has ≥1 correct
