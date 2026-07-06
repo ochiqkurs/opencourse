@@ -11,9 +11,14 @@ every lesson**. Authoring rules live in the sibling skills — read
 `module-konspekt` for konspekt structure/tone and `quiz-author` for question
 rules; this skill covers the pipeline around them.
 
-All tooling lives in `~/tech/open-course/content-seed-2026-07-05/` (outside
-this repo, on the dev Mac). The 8 frontend-path courses + Python course are
-finished reference examples (`konspekt_js.py`, `konspekt_react.py`, …).
+The emitter lives **in this repo, next to this file**:
+`.claude/skills/course-content/seedlib.py` — the skill is self-contained.
+Finished content batches (one-off artifacts, deliberately outside the repo)
+live on the dev Mac in `~/tech/open-course/content-seed-2026-07-05/`: the 8
+frontend-path courses + Python course are reference examples
+(`konspekt_js.py`, `konspekt_react.py`, …; `seedlib.py` there is a symlink
+back to this repo's copy). If that directory is unavailable, nothing is lost —
+write a fresh content module from the contract below.
 
 ## Workflow (per course)
 
@@ -29,7 +34,8 @@ finished reference examples (`konspekt_js.py`, `konspekt_react.py`, …).
    Then `grep -n '[а-яА-Я]'` — Latin-Uzbek text picks up Cyrillic look-alikes
    ("izohи", "ekranда") surprisingly often.
 4. **Generate + apply locally**: 3-line `gen_<kurs>.py` calling
-   `seedlib.emit_course_sql(...)` → `NN_<kurs>_content.sql`; apply with
+   `seedlib.emit_course_sql(...)` (import it from this skill's directory)
+   → `NN_<kurs>_content.sql`; apply with
    `psql -v ON_ERROR_STOP=1 -d ochiqkurs -f`. Local dev server:
    `~/.local/share/virtualenvs/web-site-_VaapEyK/bin/python manage.py
    runserver 8077` (plain `pipenv run` resolves the wrong venv).

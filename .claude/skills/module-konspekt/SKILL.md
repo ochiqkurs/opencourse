@@ -51,10 +51,10 @@ don't teach material from later modules.
 
 ## SQL pattern
 
-**Canonical pipeline**: `~/tech/open-course/content-seed-2026-07-05/seedlib.py`
-(outside this repo, on the dev Mac) — write a `konspekt_<kurs>.py` content
-module and let `seedlib.emit_course_sql` produce the SQL; see the
-`course-content` skill for the whole-course workflow and the contract. It
+**Canonical pipeline**: `.claude/skills/course-content/seedlib.py` (in this
+repo) — write a `konspekt_<kurs>.py` content module and let
+`seedlib.emit_course_sql` produce the SQL; see the `course-content` skill for
+the whole-course workflow and the contract. It
 handles dollar-quoting (`$md$…$md$`), keying by `module_id + slug`, computed
 `order` (konspekt = `MAX(video order)+1`, test after it at `+2`) and the
 dependency-ordered deletes (raw SQL gets no ORM cascade).
