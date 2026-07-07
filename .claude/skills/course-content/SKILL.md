@@ -11,8 +11,10 @@ every lesson**. Authoring rules live in the sibling skills — read
 `module-konspekt` for konspekt structure/tone and `quiz-author` for question
 rules; this skill covers the pipeline around them.
 
-The emitter lives **in this repo, next to this file**:
-`.claude/skills/course-content/seedlib.py` — the skill is self-contained.
+The tooling lives **in this repo, next to this file** — the skill is
+self-contained: `seedlib.py` (SQL emitter), `normalize.py` (fence-aware
+apostrophe pass), `pipeline.sh` (the whole generate→verify→prod cycle as one
+command).
 Finished content batches (one-off artifacts, deliberately outside the repo)
 live on the dev Mac in `~/tech/open-course/content-seed-2026-07-05/`: the 8
 frontend-path courses + Python course are reference examples
@@ -22,45 +24,40 @@ write a fresh content module from the contract below.
 
 ## Workflow (per course)
 
+**Batch discipline: one course per run.** Authoring several courses in one
+session bloats the context (compactions, token burn) and multi-file prod
+loops fail messily (a mid-loop failure once silently skipped the files after
+it). Author one `konspekt_<kurs>.py`, take it all the way to prod with
+`pipeline.sh`, then start the next course fresh.
+
 1. **Inspect structure** — query modules + lessons (id, order, slug, title):
    the lesson titles are your only source about video content, so read them
    carefully; check for pre-existing quizzes/articles first (see "Existing
    content" below).
 2. **Write one content module** `konspekt_<kurs>.py` following the contract
    (below). Author everything in it: konspekts, descriptions, quizzes.
-3. **Normalize apostrophes** — run the regex pass `(?<=[a-zA-Z])'(?=[a-zA-Z])`
-   → `’` (U+2019) **outside code fences only** (split on ```` ``` ```` blocks
-   first; code keeps ASCII quotes — use double quotes in JS/HTML code strings).
-   Then `grep -n '[а-яА-Я]'` — Latin-Uzbek text picks up Cyrillic look-alikes
-   ("izohи", "ekranда") surprisingly often.
-4. **Generate + apply locally**: 3-line `gen_<kurs>.py` calling
-   `seedlib.emit_course_sql(...)` (import it from this skill's directory)
-   → `NN_<kurs>_content.sql`; apply with
-   `psql -v ON_ERROR_STOP=1 -d ochiqkurs -f`. Local dev server:
-   `~/.local/share/virtualenvs/web-site-_VaapEyK/bin/python manage.py
-   runserver 8077` (plain `pipenv run` resolves the wrong venv).
-5. **Verify** (all must pass):
-   - every module: 1 article + 1 quiz, konspekt order **before** test;
-   - zero lessons with empty `description` in the course;
-   - zero questions without a correct choice;
-   - MC correct-answer positions spread across 1–4 (seedlib prints this);
-   - konspekt + test pages return 200; tables/code render (bleach strips
-     `<sub>/<sup>` — use Unicode ₂/² in markdown tables);
-   - re-run the SQL once — idempotency proof.
-6. **Prod**: fresh backup (`ssh myserver 'bash ~/backups/pg_backup.sh'`), scp
-   the SQL, apply via `manage.py dbshell -- -q -v ON_ERROR_STOP=1 -f`, re-run
-   the count checks there, curl 2–3 live pages.
+   Apostrophes: prose uses `’` U+2019, code fences keep ASCII quotes (use
+   double quotes in JS/HTML code strings) — the pipeline normalizes prose
+   anyway (fence-aware) and hard-fails on Cyrillic look-alikes ("izohи").
+3. **Run the local stage**:
+   `.claude/skills/course-content/pipeline.sh konspekt_<kurs>.py -o NN_<kurs>_content.sql`
+   One command = normalize → Cyrillic check → generate (via `seedlib`) →
+   apply locally twice (idempotency proof) → DB invariants (per-module
+   1 article + 1 quiz, konspekt before test, no empty descriptions, no
+   correct-less questions) → render every new page on a throwaway dev server.
+   Also eyeball seedlib's MC position spread in the output (should span 1–4)
+   and spot-check one konspekt in the browser if layout could be affected
+   (bleach strips `<sub>/<sup>` — use Unicode ₂/² in markdown tables).
+4. **Ship**: re-run the same command with `--prod`. The script does the
+   module-id divergence check, fresh backup, scp + dbshell apply, prod
+   invariants and live-page curls, then cleans up /tmp.
 
-   **Module-id gotcha**: for a course created recently (separate INSERTs on
-   local and prod), serial module ids can DIVERGE between the two DBs — the
-   SQL then fails with a NULL `"order"` (MAX over an empty foreign module) or,
-   worse, silently targets wrong modules. Before applying, compare
-   `SELECT id, slug FROM learning_module WHERE course_id=...` on both sides;
-   if they differ, remap the content module's ids by slug (see
-   `gen_dl94_prod.py` in the content-seed dir). Long-standing courses are safe
-   (local DB is a prod copy). Also: when applying several SQL files in one
-   shell loop with `exit 1` on failure, the files after the failed one were
-   NOT applied — re-check each file's status individually.
+   **Module-id gotcha** (pipeline checks this, know why): for a course
+   created recently (separate INSERTs on local and prod), serial module ids
+   can DIVERGE between the two DBs — the SQL then fails with a NULL `"order"`
+   or silently targets wrong modules. If the check fails, remap the content
+   module's ids by slug (see `gen_dl94_prod.py` in the content-seed dir).
+   Long-standing courses are safe (local DB is a prod copy).
 
 ## Content-module contract (consumed by seedlib.emit_course_sql)
 

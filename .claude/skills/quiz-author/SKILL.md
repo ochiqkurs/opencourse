@@ -65,6 +65,7 @@ lessonview / note / videobookmark → lesson), exactly as seedlib does.
 If the course already has hand-made quizzes with real attempts, **keep them** —
 only fill gaps (e.g. empty explanations, guarded by `AND explanation = ''`).
 
-Apply locally with `psql -v ON_ERROR_STOP=1 -d ochiqkurs -f file.sql`; prod via
-`manage.py dbshell -- -f`. After applying, verify: every question has ≥1 correct
-choice, and render the quiz page logged-out (should 200 with a login prompt).
+Apply + verify with the course-content skill's
+`.claude/skills/course-content/pipeline.sh` (one command: generate, apply
+twice, DB invariants incl. no correct-less questions, render check; `--prod`
+ships it). Quiz pages logged-out should 200 with a login prompt.

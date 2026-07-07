@@ -60,8 +60,9 @@ handles dollar-quoting (`$md$…$md$`), keying by `module_id + slug`, computed
 dependency-ordered deletes (raw SQL gets no ORM cascade).
 
 Two rendering gotchas: bleach strips raw `<sub>/<sup>` in markdown — use
-Unicode (₂, ²); run the apostrophe pass (ASCII `'` → `’` between letters,
-**outside code fences only**) plus a `[а-яА-Я]` grep before generating. Apply
-locally, then render the page (both themes if layout-relevant) and check:
-markdown renders, code blocks highlighted, tables don't overflow, sidebar
-shows the lesson with the article icon.
+Unicode (₂, ²); prose apostrophes are `’` U+2019, code keeps ASCII (the
+course-content skill's `pipeline.sh` runs the fence-aware normalize pass and
+a `[а-яА-Я]` grep for you, applies locally and render-checks every page).
+For layout-relevant changes still eyeball one page in both themes: markdown
+renders, code blocks highlighted, tables don't overflow, sidebar shows the
+lesson with the article icon.
