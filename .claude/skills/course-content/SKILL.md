@@ -51,6 +51,17 @@ write a fresh content module from the contract below.
    the SQL, apply via `manage.py dbshell -- -q -v ON_ERROR_STOP=1 -f`, re-run
    the count checks there, curl 2–3 live pages.
 
+   **Module-id gotcha**: for a course created recently (separate INSERTs on
+   local and prod), serial module ids can DIVERGE between the two DBs — the
+   SQL then fails with a NULL `"order"` (MAX over an empty foreign module) or,
+   worse, silently targets wrong modules. Before applying, compare
+   `SELECT id, slug FROM learning_module WHERE course_id=...` on both sides;
+   if they differ, remap the content module's ids by slug (see
+   `gen_dl94_prod.py` in the content-seed dir). Long-standing courses are safe
+   (local DB is a prod copy). Also: when applying several SQL files in one
+   shell loop with `exit 1` on failure, the files after the failed one were
+   NOT applied — re-check each file's status individually.
+
 ## Content-module contract (consumed by seedlib.emit_course_sql)
 
 ```python
