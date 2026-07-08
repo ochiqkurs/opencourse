@@ -6,8 +6,11 @@
 #   seedlib -> apply locally TWICE (idempotency proof) -> DB invariants ->
 #   render every new konspekt/test page on a throwaway dev server.
 # Prod stage (--prod):
-#   module-id divergence check (local vs prod) -> fresh backup -> scp ->
-#   dbshell apply -> prod invariants -> live-page curls -> /tmp cleanup.
+#   divergence check (v1 id-keyed: module ids local vs prod; v2 slug-keyed:
+#   module slugs exist on prod) -> fresh backup -> scp -> dbshell apply ->
+#   prod invariants -> live-page curls -> /tmp cleanup.
+# v2 (COURSE_SLUG) content modules emit id-free SQL: the same file applies
+# on both DBs, so the v1 remap-by-slug dance is unnecessary for them.
 #
 # Usage: pipeline.sh path/to/konspekt_x.py [-o out.sql] [--prod]
 #
@@ -58,11 +61,15 @@ import importlib, sys
 mod = importlib.import_module(sys.argv[1])
 from seedlib import emit_course_sql
 emit_course_sql(mod, sys.argv[2])
-print(mod.COURSE_ID)
+print(getattr(mod, "COURSE_SLUG", None) or mod.COURSE_ID)
 PY
 )
 echo "$GEN_OUT"
-COURSE_ID=$(echo "$GEN_OUT" | tail -1)
+COURSE_KEY=$(echo "$GEN_OUT" | tail -1)
+case "$COURSE_KEY" in
+  (*[!0-9]*) CREF="(SELECT id FROM learning_course WHERE slug = '$COURSE_KEY')" ;;
+  (*)        CREF="$COURSE_KEY" ;;
+esac
 
 step "apply locally twice (idempotency)"
 "${PSQL[@]}" -q -v ON_ERROR_STOP=1 -f "$OUT"
@@ -75,10 +82,10 @@ SELECT 'summary|' || count(DISTINCT m.id) || '|' ||
   count(*) FILTER (WHERE l.lesson_type='article') || '|' ||
   count(*) FILTER (WHERE l.lesson_type='quiz')
 FROM learning_module m JOIN learning_lesson l ON l.module_id=m.id
-WHERE m.course_id = $COURSE_ID;
+WHERE m.course_id = $CREF;
 SELECT 'bad_modules|' || count(*) FROM (
   SELECT m.id FROM learning_module m JOIN learning_lesson l ON l.module_id=m.id
-  WHERE m.course_id = $COURSE_ID GROUP BY m.id
+  WHERE m.course_id = $CREF GROUP BY m.id
   HAVING count(*) FILTER (WHERE l.lesson_type='article') <> 1
       OR count(*) FILTER (WHERE l.lesson_type='quiz') <> 1
       OR (max(l."order") FILTER (WHERE l.lesson_type='article')
@@ -86,12 +93,12 @@ SELECT 'bad_modules|' || count(*) FROM (
 ) x;
 SELECT 'empty_desc|' || count(*)
 FROM learning_lesson l JOIN learning_module m ON m.id=l.module_id
-WHERE m.course_id = $COURSE_ID AND l.description = '';
+WHERE m.course_id = $CREF AND l.description = '';
 SELECT 'no_correct|' || count(*) FROM learning_quizquestion qq
 JOIN learning_quiz q ON q.id=qq.quiz_id
 JOIN learning_lesson l ON l.id=q.lesson_id
 JOIN learning_module m ON m.id=l.module_id
-WHERE m.course_id = $COURSE_ID
+WHERE m.course_id = $CREF
 AND NOT EXISTS (SELECT 1 FROM learning_quizchoice c
                 WHERE c.question_id=qq.id AND c.is_correct);
 EOF
@@ -107,7 +114,7 @@ check_invariants() {  # $1 = labelled psql output
   echo "invariants OK"
 }
 
-step "local invariants (course $COURSE_ID)"
+step "local invariants (course $COURSE_KEY)"
 check_invariants "$("${PSQL[@]}" -t -A -f "$VERIFY_SQL")"
 
 step "render check (dev server :$PORT)"
@@ -116,7 +123,7 @@ URLS=$("${PSQL[@]}" -t -A -c "
   FROM learning_lesson l
   JOIN learning_module m ON m.id=l.module_id
   JOIN learning_course c ON c.id=m.course_id
-  WHERE m.course_id = $COURSE_ID AND l.lesson_type IN ('article','quiz')")
+  WHERE m.course_id = $CREF AND l.lesson_type IN ('article','quiz')")
 ( cd "$SKILL_DIR/../../.." && exec "$VENV_PY" manage.py runserver --noreload "$PORT" >/dev/null 2>&1 ) &
 SERVER_PID=$!
 disown "$SERVER_PID"
@@ -139,15 +146,30 @@ if [ "$PROD" = 0 ]; then
   exit 0
 fi
 
-step "module-id divergence check (local vs prod)"
-LOCAL_IDS=$("${PSQL[@]}" -t -A -c "SELECT id||':'||slug FROM learning_module WHERE course_id=$COURSE_ID ORDER BY id")
-PROD_IDS=$("${SSH[@]}" "cd ~/opencourse && venv/bin/python manage.py dbshell -- -t -A -c \"SELECT id||':'||slug FROM learning_module WHERE course_id=$COURSE_ID ORDER BY id\"")
+step "divergence check (local vs prod)"
+if [ "$COURSE_KEY" = "$CREF" ]; then
+  # v1 (id-keyed content module): ids must match exactly, else remap by slug
+  Q="SELECT id||':'||slug FROM learning_module WHERE course_id=$CREF ORDER BY id"
+else
+  # v2 (slug-keyed): SQL carries no ids — only the slugs must exist on prod
+  Q="SELECT slug FROM learning_module WHERE course_id = $CREF ORDER BY slug"
+fi
+LOCAL_IDS=$("${PSQL[@]}" -t -A -c "$Q")
+PROD_IDS=$("${SSH[@]}" "cd ~/opencourse && venv/bin/python manage.py dbshell -- -t -A -c \"$Q\"")
+if [ -z "$PROD_IDS" ]; then
+  echo "FAIL: course/modules missing on prod — run new-course.sh --prod (or apply the course SQL) first"
+  exit 1
+fi
 if [ "$LOCAL_IDS" != "$PROD_IDS" ]; then
-  echo "FAIL: module ids diverge — remap by slug before applying (see gen_dl94_prod.py pattern)"
+  if [ "$COURSE_KEY" = "$CREF" ]; then
+    echo "FAIL: module ids diverge — remap by slug (gen_dl94_prod.py pattern) or convert the module to the v2 slug contract"
+  else
+    echo "FAIL: module slugs differ between local and prod — sync the course rows first"
+  fi
   diff <(echo "$LOCAL_IDS") <(echo "$PROD_IDS") || true
   exit 1
 fi
-echo "ids match"
+echo "local and prod in sync"
 
 step "prod backup"
 "${SSH[@]}" 'bash ~/backups/pg_backup.sh && ls -t ~/backups/*.sql.gz | head -1'
@@ -171,4 +193,4 @@ done
 [ "$LIVE_FAIL" = 0 ] || { echo "FAIL: live pages"; exit 1; }
 echo "$(echo "$URLS" | grep -c .) live pages 200"
 
-echo; echo "PROD PASS (course $COURSE_ID)"
+echo; echo "PROD PASS (course $COURSE_KEY)"
