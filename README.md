@@ -12,6 +12,18 @@
 
 ---
 
+## Screenshots
+
+| Course catalog | Lesson page |
+|---|---|
+| ![Course catalog](docs/screenshots/catalog.png) | ![Lesson page](docs/screenshots/lesson.png) |
+
+| Learning streak | Dark mode |
+|---|---|
+| ![Streak heatmap](docs/screenshots/streak.png) | ![Dark mode](docs/screenshots/dark-mode.png) |
+
+--- 
+
 ## Features
 
 - **Video & article lessons** — YouTube-embedded videos with timestamp bookmarks, article/text lessons with Markdown rendering
@@ -174,9 +186,13 @@ opencourse/
 ├── Pipfile
 └── .env.example
 ```
+
+--- 
+
 ### Data model
 
 ![Data model](docs/models_graph.png)
+
 ---
 
 ## License
