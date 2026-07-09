@@ -1,3 +1,11 @@
+<p align="center">
+  <a href="https://ochiqkurs.uz"><strong>Live → ochiqkurs.uz</strong></a>
+</p>
+
+![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![CI](https://github.com/ochiqkurs/opencourse/actions/workflows/deploy.yml/badge.svg)
+![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
 # Ochiq Kurs
 
 **Ochiq Kurs** (Ochiq — _open_) is a Django-based Learning Management System for free online video courses in Uzbek. It features YouTube-embedded lessons, article/text lessons, per-lesson quizzes, learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks, and a Udemy-style catalog UI.
