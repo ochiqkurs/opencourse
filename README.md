@@ -174,7 +174,9 @@ opencourse/
 ├── Pipfile
 └── .env.example
 ```
+### Data model
 
+![Data model](docs/models_graph.png)
 ---
 
 ## License
