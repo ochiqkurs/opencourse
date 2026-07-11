@@ -95,7 +95,10 @@
   window.onYouTubeIframeAPIReady = function () {
     player = new YT.Player('yt-player', {
       videoId: VIDEO_ID,
-      playerVars: { rel: 0, modestbranding: 1 },
+      // controls:0 — native chrome off; our own bar (lesson_player.js) drives
+      // the player through the API, so YouTube's title/gradient overlay never
+      // renders on pause (it only appears with native controls or iframe hover).
+      playerVars: { rel: 0, controls: 0, disablekb: 1, playsinline: 1, iv_load_policy: 3, fs: 0 },
       events: {
         onStateChange: function (e) {
           if (e.data === YT.PlayerState.PLAYING) {
@@ -107,8 +110,9 @@
         },
       },
     });
-    // Expose player reference for bookmark JS
+    // Expose player reference for bookmark + custom-controls JS
     if (window.__bmSetPlayer) window.__bmSetPlayer(player);
+    if (window.__vpSetPlayer) window.__vpSetPlayer(player);
   };
 
   // ── Inject the IFrame API script ────────────────────────

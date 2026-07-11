@@ -30,8 +30,58 @@
 <div class="lesson-main">
 
 {% if lesson.lesson_type == 'video' %}
-  <div class="video-wrapper">
+  {# Custom player chrome: the iframe is pointer-events:none and controls=0, so #}
+  {# YouTube's title/gradient overlay never gets a hover or a paused-with-controls #}
+  {# state to draw itself in. All interaction goes through our own layers. #}
+  <div class="video-wrapper vp" id="vp">
     <div id="yt-player"></div>
+    <div class="vp-gesture" id="vp-gesture"></div>
+
+    <div class="vp-bar" id="vp-bar">
+      <input type="range" id="vp-seek" class="vp-seek" min="0" max="0" step="0.1" value="0" aria-label="Video vaqti">
+      <div class="vp-controls">
+        <button type="button" class="vp-btn" id="vp-play" aria-label="O'ynatish / pauza">
+          <svg id="vp-ic-play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+          <svg id="vp-ic-pause" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none" hidden><rect x="5" y="4" width="4.5" height="16" rx="1"/><rect x="14.5" y="4" width="4.5" height="16" rx="1"/></svg>
+        </button>
+        <button type="button" class="vp-btn" id="vp-mute" aria-label="Ovozni o'chirish / yoqish">
+          <svg id="vp-ic-vol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          <svg id="vp-ic-muted" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <input type="range" id="vp-vol" class="vp-vol" min="0" max="100" value="100" aria-label="Ovoz balandligi">
+        <span class="vp-time" id="vp-time">0:00 / 0:00</span>
+        <span class="vp-spacer"></span>
+        <button type="button" class="vp-btn vp-rate" id="vp-rate" aria-label="Tezlik">1×</button>
+        <button type="button" class="vp-btn" id="vp-fs" aria-label="To'liq ekran">
+          <svg id="vp-ic-max" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          <svg id="vp-ic-min" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="vp-end" id="vp-end" hidden>
+      <div class="vp-end-actions">
+        <button type="button" id="vp-replay" class="btn btn-secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Qayta ko'rish
+        </button>
+        {% if next_lesson %}
+        <a class="btn btn-primary" href="{% url 'learning:lesson_detail' course.slug next_lesson.module.slug next_lesson.slug %}">
+          Keyingi dars
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="vp-poster" id="vp-poster">
+      <img src="https://i.ytimg.com/vi/{{ lesson.youtube_video_id }}/maxresdefault.jpg"
+           onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/{{ lesson.youtube_video_id }}/hqdefault.jpg'"
+           alt="{{ lesson.title }}">
+      <button type="button" class="vp-bigplay" id="vp-bigplay" aria-label="Videoni boshlash">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+      </button>
+    </div>
   </div>
 {% elif lesson.lesson_type == 'quiz' %}
   <div class="quiz-lesson-content">
@@ -489,6 +539,9 @@
 })();
 </script>
 
+{% if lesson.lesson_type == 'video' %}
+<script src="{% static 'js/lesson_player.js' %}"></script>
+{% endif %}
 <script src="{% static 'js/lesson_tracker.js' %}"></script>
 {% if user.is_authenticated %}
 <script src="{% static 'js/lesson_notes.js' %}"></script>

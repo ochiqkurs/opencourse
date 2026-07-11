@@ -52,6 +52,7 @@ opencourse/                          # Repository root (also Django project root
 ├── static/
 │   ├── css/style.css
 │   └── js/
+│       ├── lesson_player.js         # Custom player chrome: play/pause/seek/volume/rate/fullscreen over a controls-less YouTube iframe
 │       ├── lesson_tracker.js        # YouTube IFrame API: record one view per play, mark complete, article auto-record
 │       ├── lesson_notes.js          # Markdown notes, save/preview
 │       ├── lesson_bookmarks.js      # Video timestamp bookmarks: add, delete, seek YT player
@@ -202,6 +203,13 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 - Playing a lesson also flips `LessonProgress.is_completed=True` (auto-completion). The manual "Tugatildi" button remains for users who want to mark a lesson done without watching the video.
 - `record_view` also calls `_update_streak()` and `_maybe_issue_certificate()`.
 - No CSRF-exempt beacon endpoint anymore; `record_view` is `@login_required` + standard CSRF.
+
+### Custom Video Player (`lesson_player.js`)
+- **Why it exists:** YouTube's embed draws a title/channel + dark-gradient overlay whenever its chrome is awake (pause with native controls, hover, seeks). It cannot be removed by embed parameters (`showinfo` dead since 2018, `modestbranding` since 2023) — but it *stays asleep* if the iframe never sees a pointer event and never renders native controls. So the player loads with `playerVars: {controls:0, disablekb:1, playsinline:1, iv_load_policy:3, fs:0, rel:0}`, the iframe is `pointer-events:none`, and all interaction goes through our own chrome driving the IFrame API.
+- **Markup** lives in `lesson_detail.html` inside `.video-wrapper.vp`: a gesture layer (`#vp-gesture`, click = play/pause with a 220 ms delay so dblclick = fullscreen), a control bar (`#vp-bar`: seek slider, play/pause, mute + volume, elapsed/total time, playback-rate cycle button, fullscreen), a poster cover (`#vp-poster`, YT `maxresdefault` → `hqdefault` fallback, hides on first `PLAYING`), and an end overlay (`#vp-end`: "Qayta ko'rish" + "Keyingi dars →" — covers YouTube's related-videos wall and keeps navigation forward).
+- `lesson_tracker.js` still owns the `YT.Player` instance (view/complete tracking unchanged); it hands the reference to the chrome via `window.__vpSetPlayer(player)` (same pattern as `__bmSetPlayer` for bookmarks). `lesson_player.js` is included **before** `lesson_tracker.js` on video lessons.
+- Control bar auto-hides after 2.6 s of mouse idle while playing (`.vp-idle`); always visible when paused/ended. Volume/mute/rate persist in `localStorage` (`vp:vol`, `vp:muted`, `vp:rate`). Keyboard: `space`/`k` toggle, `←`/`→` ±5 s, `m` mute, `f` fullscreen — suppressed while typing in inputs/textareas or when a control outside the player has focus. Fullscreen is wrapper-level (`shell.requestFullscreen()`, CSS `position:fixed` fallback for iOS) so our bar stays on top.
+- **Residual YouTube chrome (accepted, irreducible):** the title overlay still flashes for ~3–4 s at play-start, after a resume, and after a seek made while playing (those transitions wake the embed's chrome internally; it auto-fades only while playing). Pausing *during* that awake window leaves the overlay visible until the next play; a seek made while cleanly paused does **not** wake it. A pause after ≥5 s of playback (the common case, and the original complaint) is completely clean. The wake-on-play cannot be suppressed: the embed's postMessage `apiInterface` was dumped and probed on 2026-07-10 — there is no controls/chrome-hiding command (`hideVideoInfo` toggles stats-for-nerds; `mutedAutoplay` doesn't start playback from the API; names like `hideControls` aren't in the interface and are ignored). Verified empirically with Playwright screenshots; the sleep/wake behavior is not documented by YouTube and may change.
 
 ### Streak System
 - Updated whenever a `LessonView` is recorded **or** the manual complete button is pressed.

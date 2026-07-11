@@ -1584,6 +1584,109 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
   border: 0;
 }
 
+/* ── Custom video player chrome (.vp) ─────────────────────
+   The iframe never receives pointer events and loads with controls=0, so
+   YouTube's own chrome (title/channel/gradient) stays asleep; every control
+   below talks to the player through the IFrame API instead. */
+.vp iframe { pointer-events: none; }
+.vp svg[hidden] { display: none; }  /* base `svg{display:block}` must not beat [hidden] */
+.vp-gesture { position: absolute; inset: 0; z-index: 1; }
+.vp.vp-idle { cursor: none; }
+
+.vp-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 4px 12px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(8, 15, 13, .82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: opacity .18s ease;
+}
+.vp.vp-idle .vp-bar { opacity: 0; pointer-events: none; }
+
+.vp-controls { display: flex; align-items: center; gap: 8px; }
+.vp-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: #fff; flex: none;
+  transition: background .12s;
+}
+.vp-btn:hover { background: rgba(255, 255, 255, .14); }
+.vp-btn svg { width: 19px; height: 19px; }
+.vp-rate {
+  width: auto; min-width: 34px; padding: 0 9px;
+  font-family: var(--font-mono); font-size: .84rem; font-weight: 600;
+}
+.vp-time {
+  color: rgba(255, 255, 255, .85);
+  font-family: var(--font-mono); font-size: .8rem;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.vp-spacer { flex: 1; }
+
+.vp-seek, .vp-vol {
+  -webkit-appearance: none; appearance: none;
+  height: 14px; margin: 0; background: transparent; cursor: pointer;
+}
+.vp-seek { width: 100%; }
+.vp-vol { width: 68px; flex: none; }
+.vp-seek::-webkit-slider-runnable-track, .vp-vol::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right,
+    var(--brand-500) var(--vp-progress, 0%),
+    rgba(255, 255, 255, .28) var(--vp-progress, 0%));
+}
+.vp-seek::-webkit-slider-thumb, .vp-vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px; margin-top: -4px;
+  border: 0; border-radius: 50%; background: var(--brand-400);
+}
+.vp-seek::-moz-range-track, .vp-vol::-moz-range-track {
+  height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .28);
+}
+.vp-seek::-moz-range-progress, .vp-vol::-moz-range-progress {
+  height: 4px; border-radius: 2px; background: var(--brand-500);
+}
+.vp-seek::-moz-range-thumb, .vp-vol::-moz-range-thumb {
+  width: 12px; height: 12px; border: 0; border-radius: 50%;
+  background: var(--brand-400);
+}
+
+.vp-poster { position: absolute; inset: 0; z-index: 4; padding: 0; border: 0; background: #000; cursor: pointer; }
+.vp-poster img { width: 100%; height: 100%; object-fit: cover; }
+.vp-bigplay {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 76px; height: 76px; border: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-600); color: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
+  transition: background .15s ease, transform .15s ease;
+}
+.vp-poster:hover .vp-bigplay { background: var(--brand-500); transform: translate(-50%, -50%) scale(1.06); }
+.vp-bigplay svg { width: 30px; height: 30px; margin-left: 4px; }
+
+.vp-end {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 15, 13, .92);
+}
+.vp-end[hidden] { display: none; }
+.vp-end-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; padding: 16px; }
+
+.vp:fullscreen { border-radius: 0; }
+.vp-fs-fallback {
+  position: fixed !important; inset: 0; z-index: 1200;
+  border-radius: 0; aspect-ratio: auto;
+}
+
+@media (max-width: 640px) {
+  .vp-vol { display: none; }
+  .vp-bar { padding: 2px 8px 6px; }
+  .vp-btn { width: 30px; height: 30px; }
+  .vp-bigplay { width: 60px; height: 60px; }
+  .vp-bigplay svg { width: 24px; height: 24px; }
+}
+
 .lesson-title-row {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   margin: 22px 0 10px;
