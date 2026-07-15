@@ -1673,6 +1673,21 @@ details[open] > .module-summary::before { transform: rotate(45deg); }
 .vp-end[hidden] { display: none; }
 .vp-end-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; padding: 16px; }
 
+.vp-spinner {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.vp-spinner[hidden] { display: none; }
+.vp-spinner-ring {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, .25);
+  border-top-color: var(--brand-400);
+  animation: vp-spin .8s linear infinite;
+}
+@keyframes vp-spin { to { transform: rotate(360deg); } }
+.vp.vp-loading .vp-bigplay { opacity: 0; }
+
 .vp:fullscreen { border-radius: 0; }
 .vp-fs-fallback {
   position: fixed !important; inset: 0; z-index: 1200;

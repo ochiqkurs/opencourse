@@ -22,13 +22,22 @@
   var poster  = document.getElementById('vp-poster');
   var endOv   = document.getElementById('vp-end');
   var replay  = document.getElementById('vp-replay');
+  var spinner = document.getElementById('vp-spinner');
 
   var player = null;
+  var ready = false;        // onReady fired for the current player instance
+  var pendingPlay = false;  // play was requested before the player was ready
+  var playIntent = false;   // last user/state intent: true = should be playing
+  var intentAt = 0;         // when the user last explicitly played/paused
+  var lastT = -1;           // getCurrentTime() at the previous tick
+  var advancing = false;    // playback clock moved since the previous tick
   var duration = 0;
   var ticker = null;
   var idleTimer = null;
-  var clickTimer = null;
   var dragging = false;
+
+  // While a fresh user action settles, the UI follows the user, not YT.
+  var INTENT_GRACE_MS = 3000;
 
   var RATES = [1, 1.25, 1.5, 1.75, 2, 0.75];
 
@@ -41,6 +50,17 @@
 
   function state() { return player && player.getPlayerState ? player.getPlayerState() : -1; }
   function isPlaying() { return state() === 1; }
+  // "Playing-ish": actually playing (per state cache OR the moving clock),
+  // buffering on the way to playing, or queued.
+  function playingish() {
+    return pendingPlay || isPlaying() || advancing || (state() === 3 && playIntent);
+  }
+
+  // ── Buffering / loading spinner ─────────────────────────
+  function setSpinner(on) {
+    if (spinner) spinner.hidden = !on;
+    shell.classList.toggle('vp-loading', on);
+  }
 
   // ── Progress / time readout ─────────────────────────────
   function paint() {
@@ -56,21 +76,40 @@
       seekEl.style.setProperty('--vp-progress', (duration ? (t / duration * 100) : 0) + '%');
     }
     timeEl.textContent = fmt(dragging ? Number(seekEl.value) : t) + ' / ' + fmt(duration);
+    // Reconcile the icon/spinner with reality. On slow networks YT's state
+    // cache (getPlayerState) and its events lag seconds behind or drop
+    // entirely, so two extra truths are used: (1) for a few seconds after an
+    // explicit play/pause the user's intent wins outright — a stale cache
+    // must not undo the click; (2) beyond that, a moving playback clock means
+    // "playing" no matter what the cache claims. Deltas over ~1.5 s are seeks,
+    // not playback, and don't count as advancing.
+    var s = state();
+    var dt = lastT >= 0 ? t - lastT : 0;
+    advancing = dt > 0.05 && dt < 1.5;
+    lastT = t;
+    if (Date.now() - intentAt < INTENT_GRACE_MS) {
+      paintPlayIcon(playIntent || pendingPlay);
+    } else {
+      if (s === 1 || advancing) playIntent = true;
+      else if (s === 2 || s === 0) playIntent = false;
+      paintPlayIcon(s === 1 || advancing || pendingPlay || (s === 3 && playIntent));
+    }
+    if (!pendingPlay) setSpinner(s === 3 && !advancing);
   }
 
+  // Runs from onReady onward and never stops — paused repaints are cheap,
+  // and a ticker that only runs while playing is dead exactly when the UI
+  // has drifted out of sync.
   function startTicker() {
     if (ticker) return;
     ticker = setInterval(paint, 250);
-  }
-  function stopTicker() {
-    if (ticker) { clearInterval(ticker); ticker = null; }
   }
 
   // ── Idle auto-hide of the control bar ───────────────────
   function wake() {
     shell.classList.remove('vp-idle');
     if (idleTimer) clearTimeout(idleTimer);
-    if (isPlaying()) {
+    if (isPlaying() || advancing) {
       idleTimer = setTimeout(function () { shell.classList.add('vp-idle'); }, 2600);
     }
   }
@@ -84,32 +123,41 @@
     icPause.hidden = !playing;
   }
   function play() {
-    if (!player) return;
+    playIntent = true;
+    intentAt = Date.now();
+    if (!player || !ready) {
+      // Player still bootstrapping (slow network): queue the intent instead of
+      // dropping the click, and show the spinner so the tap visibly "took".
+      pendingPlay = true;
+      setSpinner(true);
+      paintPlayIcon(true);
+      return;
+    }
     if (state() === 0) player.seekTo(0, true);
     player.playVideo();
     paintPlayIcon(true);   // optimistic; the state event confirms
   }
   function pause() {
-    if (!player) return;
-    player.pauseVideo();
+    playIntent = false;
+    intentAt = Date.now();
+    pendingPlay = false;
+    setSpinner(false);
     paintPlayIcon(false);
+    if (player && ready) player.pauseVideo();
   }
-  function toggle() { isPlaying() ? pause() : play(); }
+  function toggle() { playingish() ? pause() : play(); }
 
   playBtn.addEventListener('click', toggle);
 
-  // Single click toggles; double click goes fullscreen. Delay the single-click
-  // action briefly so a double click doesn't also pause/play.
+  // Single click toggles immediately (like youtube.com); a double click also
+  // goes fullscreen — its two click events cancel each other out, so the only
+  // cost is a brief pause/resume flicker.
   gesture.addEventListener('click', function () {
     var touch = window.matchMedia('(hover: none)').matches;
     if (touch && shell.classList.contains('vp-idle')) { wake(); return; }
-    if (clickTimer) return;
-    clickTimer = setTimeout(function () { clickTimer = null; toggle(); }, 220);
+    toggle();
   });
-  gesture.addEventListener('dblclick', function () {
-    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-    toggleFs();
-  });
+  gesture.addEventListener('dblclick', toggleFs);
 
   // ── Poster (pre-play cover) ─────────────────────────────
   function hidePoster() {
@@ -227,11 +275,17 @@
 
   // ── Wire up the player instance (created by lesson_tracker.js) ──
   function onReady() {
+    ready = true;
     var vol = localStorage.getItem('vp:vol');
     if (vol !== null) { player.setVolume(Number(vol)); volEl.value = vol; }
     if (localStorage.getItem('vp:muted') === '1') player.mute();
     var rate = parseFloat(localStorage.getItem('vp:rate'));
     if (rate && RATES.indexOf(rate) !== -1) applyRate(rate);
+    if (pendingPlay) {
+      pendingPlay = false;
+      play();
+    }
+    startTicker();  // the ticker reconciles icon/spinner/time from here on
     paint();
     paintVolume();
   }
@@ -240,21 +294,12 @@
     if (e.data === 1) {            // PLAYING
       hidePoster();
       if (endOv) endOv.hidden = true;
-      paintPlayIcon(true);
       startTicker();
-      wake();
-    } else if (e.data === 2) {     // PAUSED — clean frame: no iframe hover, no native controls
-      paintPlayIcon(false);
-      stopTicker();
-      paint();
-      wake();
     } else if (e.data === 0) {     // ENDED — cover YouTube's related-videos wall
-      paintPlayIcon(false);
-      stopTicker();
-      paint();
       if (endOv) endOv.hidden = false;
-      wake();
     }
+    paint();  // reconciles play intent, icon and spinner against the real state
+    wake();
   }
 
   window.__vpSetPlayer = function (p) {
