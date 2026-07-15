@@ -30,14 +30,18 @@
   var playIntent = false;   // last user/state intent: true = should be playing
   var intentAt = 0;         // when the user last explicitly played/paused
   var lastT = -1;           // getCurrentTime() at the previous tick
-  var advancing = false;    // playback clock moved since the previous tick
+  var lastMoveAt = 0;       // wall-clock ms when the playback clock last moved
+  var moving = false;       // clock moved within the sticky window → really playing
   var duration = 0;
   var ticker = null;
   var idleTimer = null;
   var dragging = false;
 
   // While a fresh user action settles, the UI follows the user, not YT.
+  // MOVE_STICKY_MS must stay below INTENT_GRACE_MS: after an explicit pause
+  // the stickiness has to expire before evidence is allowed to override.
   var INTENT_GRACE_MS = 3000;
+  var MOVE_STICKY_MS = 2500;
 
   var RATES = [1, 1.25, 1.5, 1.75, 2, 0.75];
 
@@ -53,7 +57,7 @@
   // "Playing-ish": actually playing (per state cache OR the moving clock),
   // buffering on the way to playing, or queued.
   function playingish() {
-    return pendingPlay || isPlaying() || advancing || (state() === 3 && playIntent);
+    return pendingPlay || isPlaying() || moving || (state() === 3 && playIntent);
   }
 
   // ── Buffering / loading spinner ─────────────────────────
@@ -76,25 +80,26 @@
       seekEl.style.setProperty('--vp-progress', (duration ? (t / duration * 100) : 0) + '%');
     }
     timeEl.textContent = fmt(dragging ? Number(seekEl.value) : t) + ' / ' + fmt(duration);
-    // Reconcile the icon/spinner with reality. On slow networks YT's state
-    // cache (getPlayerState) and its events lag seconds behind or drop
-    // entirely, so two extra truths are used: (1) for a few seconds after an
-    // explicit play/pause the user's intent wins outright — a stale cache
-    // must not undo the click; (2) beyond that, a moving playback clock means
-    // "playing" no matter what the cache claims. Deltas over ~1.5 s are seeks,
-    // not playback, and don't count as advancing.
-    var s = state();
+    // The icon follows playIntent, and playIntent only changes on solid
+    // evidence — never on YT's state cache alone. On slow networks both the
+    // cache (getPlayerState) and the time updates arrive late and in bursts:
+    // the cache can claim "paused" for many seconds while the video is
+    // visibly playing. So: a clock that moved organically within the sticky
+    // window means "playing" (bursty updates can't fake a freeze); a clock
+    // frozen past the window WITH the cache agreeing on paused/ended means
+    // "paused". A fresh user action gets INTENT_GRACE_MS before any override.
+    var now = Date.now();
     var dt = lastT >= 0 ? t - lastT : 0;
-    advancing = dt > 0.05 && dt < 1.5;
+    if (dt > 0.01 && dt < 1.5) lastMoveAt = now;  // organic motion; seeks jump farther
     lastT = t;
-    if (Date.now() - intentAt < INTENT_GRACE_MS) {
-      paintPlayIcon(playIntent || pendingPlay);
-    } else {
-      if (s === 1 || advancing) playIntent = true;
-      else if (s === 2 || s === 0) playIntent = false;
-      paintPlayIcon(s === 1 || advancing || pendingPlay || (s === 3 && playIntent));
+    moving = now - lastMoveAt < MOVE_STICKY_MS;
+    var s = state();
+    if (now - intentAt > INTENT_GRACE_MS) {
+      if (!playIntent && moving) playIntent = true;
+      else if (playIntent && !moving && (s === 2 || s === 0 || s === 5)) playIntent = false;
     }
-    if (!pendingPlay) setSpinner(s === 3 && !advancing);
+    paintPlayIcon(playIntent || pendingPlay);
+    if (!pendingPlay) setSpinner(s === 3 && !moving);
   }
 
   // Runs from onReady onward and never stops — paused repaints are cheap,
@@ -109,7 +114,7 @@
   function wake() {
     shell.classList.remove('vp-idle');
     if (idleTimer) clearTimeout(idleTimer);
-    if (isPlaying() || advancing) {
+    if (isPlaying() || moving) {
       idleTimer = setTimeout(function () { shell.classList.add('vp-idle'); }, 2600);
     }
   }
@@ -291,14 +296,17 @@
   }
 
   function onState(e) {
-    if (e.data === 1) {            // PLAYING
+    if (e.data === 1) {            // PLAYING — a real event is solid evidence
+      playIntent = true;
       hidePoster();
       if (endOv) endOv.hidden = true;
       startTicker();
-    } else if (e.data === 0) {     // ENDED — cover YouTube's related-videos wall
-      if (endOv) endOv.hidden = false;
+    } else if (e.data === 2 || e.data === 0) {  // PAUSED / ENDED
+      // Trust the event unless it's a stale straggler racing a fresh play.
+      if (Date.now() - intentAt > 1500) playIntent = false;
+      if (e.data === 0 && endOv) endOv.hidden = false;
     }
-    paint();  // reconciles play intent, icon and spinner against the real state
+    paint();  // repaints icon/spinner and updates the motion tracker
     wake();
   }
 
