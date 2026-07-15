@@ -120,7 +120,7 @@
     if (isPlaying() || moving) {
       // 3.6s: outlasts YouTube's own awake-chrome fade at play-start, so the
       // two panels don't vanish in a staggered two-step.
-      idleTimer = setTimeout(function () { shell.classList.add('vp-idle'); }, 3600);
+      idleTimer = setTimeout(function () { shell.classList.add('vp-idle'); }, 4000);
     }
   }
   shell.addEventListener('mousemove', wake);
