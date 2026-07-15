@@ -54,11 +54,6 @@
 
   function state() { return player && player.getPlayerState ? player.getPlayerState() : -1; }
   function isPlaying() { return state() === 1; }
-  // "Playing-ish": actually playing (per state cache OR the moving clock),
-  // buffering on the way to playing, or queued.
-  function playingish() {
-    return pendingPlay || isPlaying() || moving || (state() === 3 && playIntent);
-  }
 
   // SVG elements have no `hidden` property (it lives on HTMLElement), so a
   // plain `el.hidden = x` on the icon SVGs is a silent no-op — the attribute
@@ -158,7 +153,11 @@
     paintPlayIcon(false);
     if (player && ready) player.pauseVideo();
   }
-  function toggle() { playingish() ? pause() : play(); }
+  // Toggle inverts what the icon shows (playIntent drives both), so the
+  // button always does what it looks like it will do. Deciding off the
+  // clock/state here would misfire: right after a pause the sticky "moving"
+  // window still reads as playing, and a resume click would re-pause.
+  function toggle() { (playIntent || pendingPlay) ? pause() : play(); }
 
   playBtn.addEventListener('click', toggle);
 
