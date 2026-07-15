@@ -60,6 +60,14 @@
     return pendingPlay || isPlaying() || moving || (state() === 3 && playIntent);
   }
 
+  // SVG elements have no `hidden` property (it lives on HTMLElement), so a
+  // plain `el.hidden = x` on the icon SVGs is a silent no-op — the attribute
+  // must be toggled explicitly for the `svg[hidden]` CSS to kick in.
+  function setHidden(el, hide) {
+    if (hide) el.setAttribute('hidden', '');
+    else el.removeAttribute('hidden');
+  }
+
   // ── Buffering / loading spinner ─────────────────────────
   function setSpinner(on) {
     if (spinner) spinner.hidden = !on;
@@ -124,8 +132,8 @@
 
   // ── Play / pause ────────────────────────────────────────
   function paintPlayIcon(playing) {
-    icPlay.hidden = playing;
-    icPause.hidden = !playing;
+    setHidden(icPlay, playing);
+    setHidden(icPause, !playing);
   }
   function play() {
     playIntent = true;
@@ -201,8 +209,8 @@
   function paintVolume() {
     if (!player || !player.isMuted) return;
     var muted = player.isMuted() || Number(volEl.value) === 0;
-    icVol.hidden = muted;
-    icMuted.hidden = !muted;
+    setHidden(icVol, muted);
+    setHidden(icMuted, !muted);
     volEl.style.setProperty('--vp-progress', (muted ? 0 : volEl.value) + '%');
   }
   function toggleMute() {
@@ -253,8 +261,8 @@
   }
   function paintFs() {
     var fs = inFs();
-    icMax.hidden = fs;
-    icMin.hidden = !fs;
+    setHidden(icMax, fs);
+    setHidden(icMin, !fs);
   }
   fsBtn.addEventListener('click', toggleFs);
   document.addEventListener('fullscreenchange', paintFs);
