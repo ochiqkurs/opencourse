@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import ai_tutor
 
 app_name = 'learning'
 
@@ -124,6 +125,12 @@ urlpatterns = [
         '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/savol/<int:question_id>/javob/',
         views.post_answer,
         name='post_answer',
+    ),
+    # AI tutor
+    path(
+        '<slug:course_slug>/<slug:module_slug>/<slug:lesson_slug>/yordamchi/',
+        ai_tutor.tutor_chat,
+        name='tutor_chat',
     ),
     # Video bookmarks
     path(

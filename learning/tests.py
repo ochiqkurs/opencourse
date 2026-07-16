@@ -609,3 +609,195 @@ class SeoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.content.decode().strip(),
                          'google-site-verification: googletest123.html')
+
+
+# ─────────────────────────────────────────────────────────────────
+# AI tutor (per-lesson chat, Claude API tool loop)
+# ─────────────────────────────────────────────────────────────────
+
+import json as _json
+from types import SimpleNamespace as _NS
+from unittest import mock as _mock
+
+from django.core.cache import cache as _cache
+
+from .models import TutorMessage
+from . import ai_tutor as _ai_tutor
+
+_TUTOR_OVERRIDES = dict(
+    ANTHROPIC_API_KEY='test-anthropic-key',
+    # In-memory cache: the rate limiter's DB cache table isn't created in tests.
+    CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}},
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+
+
+def _fake_usage():
+    return _NS(input_tokens=100, output_tokens=50,
+               cache_creation_input_tokens=20, cache_read_input_tokens=30)
+
+
+def _text_response(text):
+    return _NS(stop_reason='end_turn',
+               content=[_NS(type='text', text=text)],
+               usage=_fake_usage())
+
+
+def _tool_response(name, tool_input, tool_id='toolu_test_1'):
+    return _NS(stop_reason='tool_use',
+               content=[_NS(type='tool_use', name=name, input=tool_input, id=tool_id)],
+               usage=_fake_usage())
+
+
+@override_settings(**_TUTOR_OVERRIDES)
+class AiTutorTests(TestCase):
+    def setUp(self):
+        _cache.clear()  # rate-limit counters leak across tests otherwise
+        self.user = User.objects.create_user(username='student', password='pw-12345!x')
+        self.client.force_login(self.user)
+        self.course = Course.objects.create(title='Python asoslari', slug='python', status='published')
+        self.module = Module.objects.create(title='Kirish', slug='kirish', course=self.course, order=0)
+        self.lesson = Lesson.objects.create(
+            title="O'zgaruvchilar", slug='ozgaruvchilar', module=self.module,
+            lesson_type='article', content='Python haqida konspekt.', order=0,
+        )
+        self.url = reverse('learning:tutor_chat',
+                           args=[self.course.slug, self.module.slug, self.lesson.slug])
+
+    def _post(self, message='Salom, tushuntirib bering'):
+        return self.client.post(self.url, data=_json.dumps({'message': message}),
+                                content_type='application/json')
+
+    # ── view guards ──────────────────────────────────────────────
+
+    def test_anonymous_is_redirected_to_login(self):
+        self.client.logout()
+        resp = self._post()
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/users/login/', resp['Location'])
+
+    def test_get_is_not_allowed(self):
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_draft_course_404s(self):
+        self.course.status = 'draft'
+        self.course.save(update_fields=['status'])
+        self.assertEqual(self._post().status_code, 404)
+
+    def test_empty_message_is_rejected(self):
+        self.assertEqual(self._post(message='   ').status_code, 400)
+        self.assertFalse(TutorMessage.objects.exists())
+
+    def test_missing_api_key_returns_503(self):
+        with override_settings(ANTHROPIC_API_KEY=''):
+            self.assertEqual(self._post().status_code, 503)
+
+    def test_rate_limit_kicks_in(self):
+        with _mock.patch.object(_ai_tutor, 'run_tutor_turn',
+                                return_value=('ok', {'input_tokens': 1, 'output_tokens': 1,
+                                                     'cache_read_tokens': 0})):
+            for _ in range(10):
+                self.assertEqual(self._post().status_code, 200)
+            self.assertEqual(self._post().status_code, 429)
+
+    # ── a full chat turn ─────────────────────────────────────────
+
+    def test_turn_persists_messages_and_usage(self):
+        fake_client = _mock.Mock()
+        fake_client.messages.create.return_value = _text_response('**Salom!** Bu javob.')
+        with _mock.patch.object(_ai_tutor, '_get_client', return_value=fake_client):
+            resp = self._post('Bu dars nima haqida?')
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'ok')
+        self.assertIn('<strong>Salom!</strong>', data['rendered'])  # markdown rendered + sanitized
+
+        rows = list(TutorMessage.objects.order_by('created_at'))
+        self.assertEqual([r.role for r in rows], ['user', 'assistant'])
+        self.assertEqual(rows[0].content, 'Bu dars nima haqida?')
+        a = rows[1]
+        # usage accumulated: input includes cache_creation (100+20)
+        self.assertEqual((a.input_tokens, a.output_tokens, a.cache_read_tokens), (120, 50, 30))
+
+    def test_tool_loop_executes_tool_and_feeds_result_back(self):
+        fake_client = _mock.Mock()
+        fake_client.messages.create.side_effect = [
+            _tool_response('get_user_progress', {}),
+            _text_response('Siz 0% dasiz.'),
+        ]
+        with _mock.patch.object(_ai_tutor, '_get_client', return_value=fake_client):
+            resp = self._post('Progressim qancha?')
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(fake_client.messages.create.call_count, 2)
+        # Second call must carry the assistant tool_use turn + a single user
+        # message containing the tool_result.
+        second_messages = fake_client.messages.create.call_args_list[1].kwargs['messages']
+        self.assertEqual(second_messages[-2]['role'], 'assistant')
+        tool_results = second_messages[-1]
+        self.assertEqual(tool_results['role'], 'user')
+        self.assertEqual(tool_results['content'][0]['type'], 'tool_result')
+        self.assertEqual(tool_results['content'][0]['tool_use_id'], 'toolu_test_1')
+        payload = _json.loads(tool_results['content'][0]['content'])
+        self.assertEqual(payload['total_lessons'], 1)
+        self.assertEqual(payload['completed_lessons'], 0)
+
+    def test_history_is_capped(self):
+        for i in range(20):
+            TutorMessage.objects.create(user=self.user, lesson=self.lesson,
+                                        role='user' if i % 2 == 0 else 'assistant',
+                                        content=f'm{i}')
+        fake_client = _mock.Mock()
+        fake_client.messages.create.return_value = _text_response('ok')
+        with _mock.patch.object(_ai_tutor, '_get_client', return_value=fake_client):
+            self._post('yangi savol')
+        sent = fake_client.messages.create.call_args.kwargs['messages']
+        # 11 ta tarix + 1 yangi savol = HISTORY_LIMIT
+        self.assertEqual(len(sent), _ai_tutor.HISTORY_LIMIT)
+        self.assertEqual(sent[-1], {'role': 'user', 'content': 'yangi savol'})
+        self.assertEqual(sent[0]['content'], 'm9')  # oldest replayed row
+
+    def test_refusal_returns_polite_fallback(self):
+        fake_client = _mock.Mock()
+        refusal = _NS(stop_reason='refusal', content=[], usage=_fake_usage())
+        fake_client.messages.create.return_value = refusal
+        with _mock.patch.object(_ai_tutor, '_get_client', return_value=fake_client):
+            resp = self._post()
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('javob bera olmayman', TutorMessage.objects.get(role='assistant').content)
+
+    # ── tool functions directly ──────────────────────────────────
+
+    def test_tool_get_user_progress_counts(self):
+        LessonProgress.objects.create(user=self.user, lesson=self.lesson, is_completed=True)
+        out = _ai_tutor._tool_get_user_progress(self.user, self.lesson, {})
+        self.assertEqual((out['completed_lessons'], out['total_lessons'], out['percent']),
+                         (1, 1, 100))
+
+    def test_tool_get_lesson_content_scoped_to_course(self):
+        other_course = Course.objects.create(title='Boshqa', slug='boshqa', status='published')
+        other_module = Module.objects.create(title='M', slug='m', course=other_course, order=0)
+        Lesson.objects.create(title='Chetdagi', slug='chet', module=other_module,
+                              lesson_type='article', content='sirli matn', order=0)
+        out = _ai_tutor._tool_get_lesson_content(self.user, self.lesson, {'lesson_slug': 'chet'})
+        self.assertIn('error', out)  # boshqa kursning darsi ko'rinmasligi kerak
+
+    def test_tool_search_courses_returns_published_only(self):
+        Course.objects.create(title='Django sirlari', slug='django-d', status='draft')
+        Course.objects.create(title='Django asoslari', slug='django-p', status='published')
+        out = _ai_tutor._tool_search_courses(self.user, self.lesson, {'query': 'django'})
+        slugs = [c['slug'] for c in out['results']]
+        self.assertEqual(slugs, ['django-p'])
+
+    def test_lesson_page_shows_chat_tab_and_history(self):
+        TutorMessage.objects.create(user=self.user, lesson=self.lesson,
+                                    role='assistant', content='**qalin** javob')
+        resp = self.client.get(reverse('learning:lesson_detail',
+                                       args=[self.course.slug, self.module.slug, self.lesson.slug]))
+        html = resp.content.decode()
+        self.assertIn('data-ld="chat"', html)
+        self.assertIn('<strong>qalin</strong>', html)

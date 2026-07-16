@@ -263,6 +263,7 @@
     <button type="button" data-ld="resources">Resurslar {% if resources %}<span class="tab-count">{{ resources|length }}</span>{% endif %}</button>
     {% if lesson.lesson_type == 'video' %}<button type="button" data-ld="bookmarks">Xatcho'plar {% if bookmarks %}<span class="tab-count">{{ bookmarks|length }}</span>{% endif %}</button>{% endif %}
     <button type="button" data-ld="qa">Savol-javob {% if questions %}<span class="tab-count">{{ questions|length }}</span>{% endif %}</button>
+    <button type="button" data-ld="chat">AI yordamchi</button>
     {% if announcements %}<button type="button" data-ld="ann">E'lonlar <span class="tab-count">{{ announcements|length }}</span></button>{% endif %}
   </div>
 
@@ -457,6 +458,41 @@
     {% endif %}
   </div>
 
+  <div class="ld-panel" data-ld-panel="chat">
+    {% if user.is_authenticated %}
+      <div class="tutor-chat">
+        <div class="tutor-messages" id="tutor-messages">
+          <div class="tutor-intro{% if tutor_messages %} tutor-hidden{% endif %}" id="tutor-intro">
+            <p><strong>Salom!</strong> Men shu dars bo'yicha AI yordamchiman. Tushunarsiz joyni so'rang —
+            dars matni, kurs tarkibi va progressingizni bilaman.</p>
+          </div>
+          {% for m in tutor_messages %}
+            {% if m.role == 'assistant' %}
+              <div class="tutor-msg tutor-msg-ai md-content">{{ m.rendered }}</div>
+            {% else %}
+              <div class="tutor-msg tutor-msg-user">{{ m.content }}</div>
+            {% endif %}
+          {% endfor %}
+          <div class="tutor-msg tutor-msg-ai tutor-typing tutor-hidden" id="tutor-typing" aria-live="polite">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="tutor-input-row">
+          <textarea id="tutor-input" class="tutor-textarea" rows="2" maxlength="2000"
+                    placeholder="Dars bo'yicha savol yozing..."></textarea>
+          <button type="button" id="tutor-send" class="btn btn-primary tutor-send" aria-label="Yuborish">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+        <div class="tutor-hint">AI javoblarida xatolik bo'lishi mumkin — muhim ma'lumotlarni tekshiring.</div>
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding:24px 16px">
+        <p>AI yordamchidan foydalanish uchun <a href="{% url 'users:login' %}">saytga kiring</a>.</p>
+      </div>
+    {% endif %}
+  </div>
+
 {% if announcements %}
   <div class="ld-panel" data-ld-panel="ann">
     <div class="announce-list">
@@ -500,7 +536,8 @@
   "is_completed": {% if progress.is_completed %}true{% else %}false{% endif %},
   "url_record": "{% url 'learning:record_view' course.slug module.slug lesson.slug %}",
   "url_complete": "{% url 'learning:mark_complete' course.slug module.slug lesson.slug %}",
-  "url_save_bookmark": "{% url 'learning:save_bookmark' course.slug module.slug lesson.slug %}"
+  "url_save_bookmark": "{% url 'learning:save_bookmark' course.slug module.slug lesson.slug %}",
+  "url_tutor": "{% url 'learning:tutor_chat' course.slug module.slug lesson.slug %}"
 }
 </script>
 
@@ -547,6 +584,7 @@
 <script src="{% static 'js/lesson_tracker.js' %}"></script>
 {% if user.is_authenticated %}
 <script src="{% static 'js/lesson_notes.js' %}"></script>
+<script src="{% static 'js/lesson_chat.js' %}"></script>
 {% endif %}
 {% if lesson.lesson_type == 'video' %}
 <script src="{% static 'js/lesson_bookmarks.js' %}"></script>

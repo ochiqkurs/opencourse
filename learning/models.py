@@ -602,3 +602,37 @@ class VideoBookmark(models.Model):
         if h:
             return f"{h}:{m:02d}:{s:02d}"
         return f"{m}:{s:02d}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# AI Tutor
+# ═══════════════════════════════════════════════════════════════
+
+class TutorMessage(models.Model):
+    """One chat turn of the per-lesson AI tutor.
+
+    Only clean text is persisted — tool_use/thinking blocks live only inside a
+    single request's agent loop and are never replayed across turns. Token
+    fields are populated on assistant rows only and exist for cost monitoring
+    (the feature launched without usage limits; these make adding one trivial).
+    """
+    ROLE_CHOICES = [
+        ('user', 'Foydalanuvchi'),
+        ('assistant', 'AI tutor'),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tutor_messages')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='tutor_messages')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    cache_read_tokens = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['user', 'lesson', 'created_at'])]
+
+    def __str__(self):
+        return f"{self.user.username} [{self.role}] on {self.lesson.title}: {self.content[:40]}"

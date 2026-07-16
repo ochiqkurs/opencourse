@@ -153,3 +153,7 @@ YOUTUBE_API_KEY = config('YOUTUBE_API_KEY', default='')
 # --- Telegram Bot ---
 BOT_SECRET = config('BOT_SECRET')
 TELEGRAM_BOT_USERNAME = config('TELEGRAM_BOT_USERNAME', default='ochiqkurs_bot')
+
+# --- AI Tutor (Claude API) ---
+ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+AI_TUTOR_MODEL = config('AI_TUTOR_MODEL', default='claude-sonnet-5')

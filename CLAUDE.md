@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, article/text lessons, per-lesson quizzes (multiple-choice + true/false), learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, video timestamp bookmarks, per-lesson Q&A, attachable resources, announcements, a public leaderboard, public certificate verification, instructor profile pages, and a Udemy-style catalog UI with pagination.
+**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, article/text lessons, per-lesson quizzes (multiple-choice + true/false), learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, video timestamp bookmarks, per-lesson Q&A, an AI tutor chat per lesson (Claude API tool-use loop — `learning/ai_tutor.py`, details in `docs/architecture.md` → **AI Tutor**), attachable resources, announcements, a public leaderboard, public certificate verification, instructor profile pages, and a Udemy-style catalog UI with pagination.
 
 ---
 
@@ -31,6 +31,7 @@ Keep `docs/architecture.md` in sync when you change models, URLs, or feature beh
 | Frontend | Django Templates + vanilla JavaScript |
 | Markdown | `markdown` 3.10.2 + `bleach` 6.3.0 |
 | Auth | Django sessions + Telegram bot |
+| AI tutor | Anthropic Claude API (`anthropic` SDK, hand-written tool-use loop) |
 | Images | Pillow 12.1.1 (course thumbnails) |
 | Time zone | Asia/Tashkent (UTC+5) |
 
@@ -77,6 +78,9 @@ YOUTUBE_API_KEY=
 BOT_SECRET=           # Shared secret with Telegram bot
 TELEGRAM_BOT_USERNAME=ochiqkurs_bot
 
+ANTHROPIC_API_KEY=    # AI tutor (empty → tutor endpoint answers 503, UI stays)
+AI_TUTOR_MODEL=       # optional; defaults to claude-sonnet-5
+
 # Production security flags
 SECURE_SSL_REDIRECT=True
 SESSION_COOKIE_SECURE=True
@@ -96,7 +100,7 @@ For local dev, copy `.env.example` to `.env` (not committed). The SEO/analytics 
 ## Frontend Conventions
 
 - **No JS framework** — vanilla JS in IIFE pattern
-- Config for JS modules is injected via embedded `<script>` JSON in `lesson_detail.html`. The current `lesson-config` keys are `lesson_id`, `video_id`, `csrf_token`, `is_authenticated`, `is_article`, `is_completed`, `url_record`, `url_complete`, `url_save_bookmark`.
+- Config for JS modules is injected via embedded `<script>` JSON in `lesson_detail.html`. The current `lesson-config` keys are `lesson_id`, `video_id`, `csrf_token`, `is_authenticated`, `is_article`, `is_completed`, `url_record`, `url_complete`, `url_save_bookmark`, `url_tutor`.
 - All AJAX uses the Fetch API with CSRF tokens. There is **no** Beacon API and **no** `visibilitychange`/`pagehidden` listener. **Viewing vs completing are separate signals** (`lesson_tracker.js`): a *view* is a single fire-and-forget POST to `record_view` on the YouTube `PLAYING` state (or on article page load) — it enrolls + bumps the streak/activity but does **not** complete the lesson. *Completion* POSTs to `mark_lesson_complete` and fires when the video is watched to ≥90% (polled `getCurrentTime/getDuration`) or `ENDED`, or on the manual "mark complete" button. Auto-complete updates the button in place (no reload); only the manual click reloads. Certificates issue from `mark_lesson_complete` (and the explicit `/sertifikat/` view), never from a view.
 - **The video player has custom chrome** (`lesson_player.js` + `.vp-*` markup in `lesson_detail.html`): the YouTube iframe loads with `controls:0` and is `pointer-events:none`, so YouTube's title/gradient overlay stays asleep — pause shows a clean frame. Our bar drives the IFrame API (play/pause, seek, volume, rate, wrapper-level fullscreen); a poster covers the cued state and an end overlay ("Keyingi dars →") covers the related-videos wall. Slow networks are handled: a play click before the API bootstraps is queued (not dropped), `BUFFERING` shows a spinner, and the play/pause icon is reconciled by a permanent 250 ms ticker that trusts user intent (3 s grace) and the moving playback clock over YT's laggy state cache. There is **no quality selector**: the API can't set quality (`setPlaybackQuality` is a no-op); a native-controls toggle was built then shelved — restore-ready code in `docs/native-quality-mode.md`. `lesson_tracker.js` still creates the `YT.Player` and hands it over via `window.__vpSetPlayer` (bookmarks use `__bmSetPlayer`). Details + accepted residual-flash limitations: `docs/architecture.md` → **Custom Video Player**.
 - Highlight.js used for code block syntax highlighting in lesson descriptions/notes
@@ -195,4 +199,4 @@ Production server: Ubuntu with Gunicorn serving the Django app. WhiteNoise handl
 - Telegram bot callback (`/api/auth/confirm/`) and `/api/auth/issue-code/` are `@csrf_exempt` but gated by the `X-Bot-Secret` header check against `BOT_SECRET`.
 - User-submitted Markdown is sanitized with `bleach` before rendering
 - All security headers enabled: `X-Frame-Options DENY`, `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`
-- Rate limiting on `/api/auth/check/<token>/` (60 req/min), the code login (10/min per IP, `prefix='code'`), and the password login (10/min per IP, `prefix='login'`). Backed by a **DatabaseCache** (`CACHES` → `cache_table`) so limits are shared across Gunicorn workers and survive restarts — not the per-process default `LocMemCache`. `_client_ip` prefers `CF-Connecting-IP`, then the last `X-Forwarded-For` entry, then `REMOTE_ADDR`, to resist spoofing. Telegram avatars are downloaded server-side to local `/media/avatars/` (`_localize_avatar`, called in both the confirm and issue-code flows) so the bot-token-bearing `api.telegram.org/file/bot<TOKEN>/…` URL is never stored or rendered to the browser. Telegram serves photos as `application/octet-stream`, so the download is validated by **magic bytes** (JPEG `FF D8 FF` / PNG) rather than the content-type header; it's best-effort (any failure → no avatar, never blocks sign-in).
+- Rate limiting on `/api/auth/check/<token>/` (60 req/min), the code login (10/min per IP, `prefix='code'`), the password login (10/min per IP, `prefix='login'`), and the AI tutor chat (10/min per **user**, `prefix='tutor'` — anti-abuse, not a quota; per-turn token usage is logged on `TutorMessage` for cost monitoring). Backed by a **DatabaseCache** (`CACHES` → `cache_table`) so limits are shared across Gunicorn workers and survive restarts — not the per-process default `LocMemCache`. `_client_ip` prefers `CF-Connecting-IP`, then the last `X-Forwarded-For` entry, then `REMOTE_ADDR`, to resist spoofing. Telegram avatars are downloaded server-side to local `/media/avatars/` (`_localize_avatar`, called in both the confirm and issue-code flows) so the bot-token-bearing `api.telegram.org/file/bot<TOKEN>/…` URL is never stored or rendered to the browser. Telegram serves photos as `application/octet-stream`, so the download is validated by **magic bytes** (JPEG `FF D8 FF` / PNG) rather than the content-type header; it's best-effort (any failure → no avatar, never blocks sign-in).

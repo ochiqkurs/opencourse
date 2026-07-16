@@ -24,7 +24,7 @@ from .models import (
     Wishlist, LessonQuestion, Announcement,
     Quiz, QuizAttempt, QuizAnswer, QuizQuestion, QuizChoice,
     LearningPath, LearningPathEnrollment, LearningPathCertificate,
-    VideoBookmark,
+    VideoBookmark, TutorMessage,
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
 from .utils import render_markdown
@@ -786,6 +786,23 @@ class LessonDetailView(View):
                 .order_by('timestamp_seconds')
             )
 
+        # AI tutor chat history (rendered server-side, same as notes)
+        tutor_messages = []
+        if request.user.is_authenticated and lesson.lesson_type != 'quiz':
+            recent = list(
+                TutorMessage.objects
+                .filter(user=request.user, lesson=lesson)
+                .order_by('-created_at')[:30]
+            )[::-1]
+            tutor_messages = [
+                {
+                    'role': m.role,
+                    'content': m.content,
+                    'rendered': mark_safe(render_markdown(m.content)) if m.role == 'assistant' else '',
+                }
+                for m in recent
+            ]
+
         quiz_ctx = _quiz_context(lesson, request.user)
 
         ctx = {
@@ -815,6 +832,7 @@ class LessonDetailView(View):
             'course_total': total_in_course,
             'announcements': announcements,
             'bookmarks': bookmarks,
+            'tutor_messages': tutor_messages,
             **quiz_ctx,
             # SEO
             'meta_description': _meta_desc(lesson.description, course.subtitle, course.title),

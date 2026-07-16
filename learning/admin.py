@@ -6,7 +6,7 @@ from .models import (
     Wishlist, LessonResource, LessonQuestion, LessonAnswer, Announcement,
     Quiz, QuizQuestion, QuizChoice, QuizAttempt, QuizAnswer,
     LearningPath, LearningPathCourse, LearningPathEnrollment,
-    LearningPathCertificate, VideoBookmark,
+    LearningPathCertificate, VideoBookmark, TutorMessage,
 )
 
 
@@ -215,3 +215,19 @@ class LearningPathCertificateAdmin(admin.ModelAdmin):
 class VideoBookmarkAdmin(admin.ModelAdmin):
     list_display = ['user', 'lesson', 'timestamp_seconds', 'created_at']
     list_filter = ['lesson__module__course']
+
+
+# ── AI Tutor ──
+
+@admin.register(TutorMessage)
+class TutorMessageAdmin(admin.ModelAdmin):
+    list_display = ['user', 'lesson', 'role', 'content_preview',
+                    'input_tokens', 'output_tokens', 'cache_read_tokens', 'created_at']
+    list_filter = ['role', 'lesson__module__course']
+    search_fields = ['user__username', 'lesson__title', 'content']
+    readonly_fields = ['created_at']
+    date_hierarchy = 'created_at'
+
+    def content_preview(self, obj):
+        return obj.content[:60]
+    content_preview.short_description = 'Xabar'

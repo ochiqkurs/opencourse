@@ -111,6 +111,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 - **LessonResource** — supplementary materials attached to a lesson: `title`, `url`, `kind` (`link` / `file` / `code` / `doc`), `order`. Rendered as a typed-icon list on the lesson "Resurslar" tab.
 - **LessonQuestion / LessonAnswer** — per-lesson Q&A. Questions belong to a `Lesson` + `User`; answers belong to a `Question` + `User`. `LessonAnswer.is_instructor` is auto-set to `True` when the answering user has `is_staff` or `is_superuser`. Rendered in the "Savol-javob" tab.
 - **Announcement** — `title`, `body`, optional `course` FK (null = global, shown on home + every course/lesson page), `is_pinned`. Ordered by `(-is_pinned, -created_at)`.
+- **TutorMessage** — one AI-tutor chat turn: `user`, `lesson`, `role` (`user`/`assistant`), `content` (plain text/Markdown), and on assistant rows `input_tokens` / `output_tokens` / `cache_read_tokens` for cost monitoring. Ordered by `created_at`; indexed on `(user, lesson, created_at)`. Only clean text is stored — tool/thinking blocks never leave a single request's agent loop.
 
 ### Quiz Models
 
@@ -173,6 +174,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/savol/tekshir/` | learning | POST: check + record one question's answer (JSON); finalizes the attempt when all are answered |
 | `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/javob/` | learning | POST: submit all quiz answers at once (JSON; legacy, unused by UI) |
 | `/malaka/<course>/<module>/<lesson>/test/<quiz_id>/urinish/<attempt_id>/natija/` | learning | Quiz result with per-question review |
+| `/malaka/<course>/<module>/<lesson>/yordamchi/` | learning | POST: AI tutor chat turn (JSON `{message}` → `{rendered}`) |
 | `/malaka/<course>/<module>/<lesson>/xatchop/` | learning | POST: save video bookmark (JSON: timestamp, note) |
 | `/malaka/<course>/<module>/<lesson>/xatchop/<id>/ochirish/` | learning | POST: delete video bookmark |
 | `/users/login/` | users | Login page: bot-link polling + bot-issued 6-digit code + inline username/password (POST dispatches on fields; honors `?next=`; code & password each rate-limited 10/min per IP) |
@@ -187,7 +189,7 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 
 URL namespaces: `learning:` and `users:`
 
-URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sevimli` / `sevimlilar` (favorite/wishlist), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `korildi` ("watched"), `savol` (question), `javob` (answer), `reyting` (rating/leaderboard), `mening-kurslarim` (my courses), `yonalish` / `yonalishlar` (learning path/s), `oqituvchi` (instructor), `xatchop` (bookmark), `tekshirish` (verification). All explicit prefixed paths (`qidiruv/`, `sevimlilar/`, `mening-kurslarim/`, `reyting/`, `kategoriya/<slug>/`, `yonalishlar/`, `yonalish/<slug>/`, `sertifikat/tekshirish/<code>/`, `oqituvchi/<username>/`) **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
+URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidiruv` (search), `kategoriya` (category), `yozilish` (enroll), `sevimli` / `sevimlilar` (favorite/wishlist), `sharh` (review), `sertifikat` (certificate), `davom` (continue), `korildi` ("watched"), `savol` (question), `javob` (answer), `reyting` (rating/leaderboard), `mening-kurslarim` (my courses), `yonalish` / `yonalishlar` (learning path/s), `oqituvchi` (instructor), `xatchop` (bookmark), `tekshirish` (verification), `yordamchi` (assistant — AI tutor). All explicit prefixed paths (`qidiruv/`, `sevimlilar/`, `mening-kurslarim/`, `reyting/`, `kategoriya/<slug>/`, `yonalishlar/`, `yonalish/<slug>/`, `sertifikat/tekshirish/<code>/`, `oqituvchi/<username>/`) **must** be listed in `learning/urls.py` before the `<slug:course_slug>/` catch-all so they win the match.
 
 ---
 
@@ -249,6 +251,16 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 - Anchors: the tab opens automatically when the URL hash is `#qa` or `#q<id>`; a newly posted question/answer redirects to `…lesson/#q<id>` so the user lands on their post.
 - Instructor badge: any answer by a staff/superuser user gets `is_instructor=True` at save time and renders an "O'qituvchi" pill.
 - Resolution: `LessonQuestion.is_resolved` is a manual flag (no UI to flip yet — set via Django admin).
+
+### AI Tutor (AI yordamchi)
+
+- Per-lesson chat on the lesson page (`AI yordamchi` tab), powered by the Claude Messages API with a **hand-written tool-use loop** — no framework. Core lives in `learning/ai_tutor.py`; frontend is `static/js/lesson_chat.js` (vanilla IIFE, same `lesson-config` pattern as the other lesson modules).
+- **Model**: `settings.AI_TUTOR_MODEL` (env `AI_TUTOR_MODEL`, default `claude-sonnet-5`); key from env `ANTHROPIC_API_KEY` (missing key → the endpoint answers 503, the UI stays visible). Requests use `output_config={"effort": "medium"}`, adaptive thinking (no `thinking` param), no sampling params (rejected by the model), `max_tokens=8000`.
+- **System prompt** = static Uzbek tutor persona block + a lesson-context block (course/module/lesson titles + `lesson.content` or `description`, capped at 15k chars) carrying `cache_control: ephemeral`, so tools+system+context are served from prompt cache on follow-up turns.
+- **Tools** (read-only, dispatched via a dict): `get_course_outline`, `get_user_progress` (completed/total/percent + `live_streak`), `get_lesson_content(lesson_slug)` (scoped to the current course), `search_courses(query)` (published only, top 5). Tool errors return `tool_result` with `is_error` so the model can recover; the loop caps at 5 iterations.
+- **Turn flow** (`tutor_chat` view, `@login_required`, POST-only): validate JSON `{message}` (non-empty, ≤2000 chars) → anti-abuse rate limit 10/min per **user** (reuses `users.views._check_rate_limit`, prefix `tutor`) → replay last 12 stored messages as history → run the agent loop → persist both turns as `TutorMessage` rows (assistant row carries accumulated token usage) → respond `{status, rendered}` where `rendered` is `render_markdown()` output (bleach-sanitized).
+- **Cost monitoring**: no usage quota at launch (deliberate); per-turn token counts land on `TutorMessage` and are visible in admin, so a daily limit can be added by counting rows/tokens.
+- `stop_reason == "refusal"` maps to a polite fallback message; `anthropic.APIError` → 502 with a friendly error. Streaming (SSE) is deliberately deferred — v1 is a plain `JsonResponse` like `save_note`.
 
 ### Lesson Resources
 - Typed (`link` / `file` / `code` / `doc`) auxiliary materials managed in the Django admin. Each has a different icon/color in the lesson "Resurslar" tab.
@@ -344,7 +356,7 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 ### Lesson Detail Page
 - Above the video: a "course-progress-strip" with the course title, `N / total` completed lessons, and a progress bar.
 - Lesson title row carries a wishlist toggle and a "Tugatildi" badge when applicable.
-- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill. Quiz-type lessons skip the tab bar entirely and render the quiz as the main content.
+- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `AI yordamchi` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill. Quiz-type lessons skip the tab bar entirely and render the quiz as the main content.
 - `Savol-javob` includes an ask form for authenticated users and a list of questions, each with an expandable answers `<details>` block and a quick-reply form. The tab auto-opens when the URL hash starts with `#qa` or `#q`.
 
 ### Dashboard (`/users/profile/`)
