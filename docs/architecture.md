@@ -254,7 +254,7 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 
 ### AI Tutor (AI yordamchi)
 
-- Per-lesson chat on the lesson page (`AI yordamchi` tab), powered by the Claude Messages API with a **hand-written tool-use loop** — no framework. Core lives in `learning/ai_tutor.py`; frontend is `static/js/lesson_chat.js` (vanilla IIFE, same `lesson-config` pattern as the other lesson modules).
+- Per-lesson chat on the lesson page — a **right-side dock panel** (VS Code-style), not a tab: the `AI yordamchi` button in the lesson top row slides in a fixed panel (`#tutor-dock`, `--tutor-w: 400px`) from the right; on ≥1200px the page content shifts left (`body.tutor-open`), below that the panel overlays with a shadow. Open/closed state persists in `localStorage` (`tutorDockOpen`) so it survives lesson-to-lesson navigation; Esc or the × button closes it. Powered by the Claude Messages API with a **hand-written tool-use loop** — no framework. Core lives in `learning/ai_tutor.py`; frontend is `static/js/lesson_chat.js` (vanilla IIFE, same `lesson-config` pattern as the other lesson modules).
 - **Model**: `settings.AI_TUTOR_MODEL` (env `AI_TUTOR_MODEL`, default `claude-sonnet-5`); key from env `ANTHROPIC_API_KEY` (missing key → the endpoint answers 503, the UI stays visible). Requests use `output_config={"effort": "medium"}`, adaptive thinking (no `thinking` param), no sampling params (rejected by the model), `max_tokens=8000`.
 - **System prompt** = static Uzbek tutor persona block + a lesson-context block (course/module/lesson titles + `lesson.content` or `description`, capped at 15k chars) carrying `cache_control: ephemeral`, so tools+system+context are served from prompt cache on follow-up turns.
 - **Tools** (read-only, dispatched via a dict): `get_course_outline`, `get_user_progress` (completed/total/percent + `live_streak`), `get_lesson_content(lesson_slug)` (scoped to the current course), `search_courses(query)` (published only, top 5). Tool errors return `tool_result` with `is_error` so the model can recover; the loop caps at 5 iterations.
@@ -356,7 +356,7 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 ### Lesson Detail Page
 - Above the video: a "course-progress-strip" with the course title, `N / total` completed lessons, and a progress bar.
 - Lesson title row carries a wishlist toggle and a "Tugatildi" badge when applicable.
-- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `AI yordamchi` / `E'lonlar` (the last tab only renders when there are announcements). Tabs with content show a small count pill. Quiz-type lessons skip the tab bar entirely and render the quiz as the main content.
+- Tabs: `Tavsif` / `Eslatma` / `Resurslar` / `Xatcho'plar` (video only) / `Savol-javob` / `E'lonlar` (the last tab only renders when there are announcements). The AI tutor is not a tab — it lives in a right-side dock toggled from the lesson top row (see **AI Tutor**). Tabs with content show a small count pill. Quiz-type lessons skip the tab bar entirely and render the quiz as the main content.
 - `Savol-javob` includes an ask form for authenticated users and a list of questions, each with an expandable answers `<details>` block and a quick-reply form. The tab auto-opens when the URL hash starts with `#qa` or `#q`.
 
 ### Dashboard (`/users/profile/`)

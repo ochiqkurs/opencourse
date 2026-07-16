@@ -3545,11 +3545,54 @@ html[data-theme="dark"] .qq-explanation { background: rgba(16,185,129,.10); }
 html[data-theme="dark"] .certificate-page { background: var(--bg-soft); }
 
 
-/* ── AI Tutor chat (lesson page) ─────────────────────────────── */
-.tutor-chat { display: flex; flex-direction: column; gap: 10px; }
+/* ── AI Tutor chat (right dock, lesson page) ─────────────────── */
+:root { --tutor-w: 400px; }
+.tutor-dock {
+  position: fixed; top: var(--nav-h); right: 0; bottom: 0;
+  width: min(var(--tutor-w), 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform .25s ease, visibility .25s;
+  z-index: 90;
+}
+.tutor-dock.open { transform: translateX(0); visibility: visible; }
+.tutor-dock.tutor-no-anim { transition: none; }
+.tutor-dock-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tutor-dock-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-head); font-weight: 700; font-size: .95rem; color: var(--text);
+}
+.tutor-dock-title svg { color: var(--brand-600); }
+.tutor-dock-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border: none; border-radius: var(--r-sm);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.tutor-dock-close:hover { background: var(--surface-2); color: var(--text); }
+.tutor-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.tutor-toggle svg { color: var(--brand-600); }
+.tutor-toggle[aria-expanded="true"] { background: var(--color-primary-soft); color: var(--brand-700); }
+/* keng ekranda kontent chapga siqiladi (VS Code paneli kabi) */
+@media (min-width: 1200px) {
+  body.tutor-open .layout-with-sidebar { max-width: none; margin-right: var(--tutor-w); }
+}
+@media (max-width: 1199.98px) {
+  .tutor-dock.open { box-shadow: -10px 0 28px rgba(0, 0, 0, .15); }
+}
+.tutor-chat {
+  display: flex; flex-direction: column; gap: 10px;
+  flex: 1; min-height: 0; padding: 14px 16px 12px;
+}
 .tutor-messages {
   display: flex; flex-direction: column; gap: 10px;
-  max-height: 480px; overflow-y: auto; padding: 4px 2px;
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px;
 }
 .tutor-intro {
   background: var(--bg-soft); border: 1px solid var(--border);

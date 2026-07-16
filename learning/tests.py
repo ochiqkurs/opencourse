@@ -793,11 +793,12 @@ class AiTutorTests(TestCase):
         slugs = [c['slug'] for c in out['results']]
         self.assertEqual(slugs, ['django-p'])
 
-    def test_lesson_page_shows_chat_tab_and_history(self):
+    def test_lesson_page_shows_chat_dock_and_history(self):
         TutorMessage.objects.create(user=self.user, lesson=self.lesson,
                                     role='assistant', content='**qalin** javob')
         resp = self.client.get(reverse('learning:lesson_detail',
                                        args=[self.course.slug, self.module.slug, self.lesson.slug]))
         html = resp.content.decode()
-        self.assertIn('data-ld="chat"', html)
+        self.assertIn('id="tutor-dock"', html)
+        self.assertIn('id="tutor-toggle"', html)
         self.assertIn('<strong>qalin</strong>', html)
