@@ -13,11 +13,14 @@ from users.views import (
 
 
 def robots_txt(request):
+    # Only /admin/ is Disallowed. /users/ and /api/ are intentionally left
+    # crawlable so Google can read the X-Robots-Tag: noindex header
+    # (NoindexMiddleware) and drop them from the index — Disallowing them would
+    # block crawling but not indexing, causing "Indexed, though blocked by
+    # robots.txt" for site-wide-linked URLs like /users/login/.
     lines = [
         "User-agent: *",
         "Disallow: /admin/",
-        "Disallow: /api/",
-        "Disallow: /users/",
         "Allow: /",
         "",
         f"Sitemap: {settings.SITE_URL.rstrip('/')}/sitemap.xml",

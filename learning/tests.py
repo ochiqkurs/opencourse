@@ -546,6 +546,23 @@ class SeoTests(TestCase):
         body = resp.content.decode()
         self.assertIn('Sitemap: https://ochiqkurs.uz/sitemap.xml', body)
         self.assertIn('Disallow: /admin/', body)
+        # /users/ and /api/ are left crawlable so Google can honour their
+        # X-Robots-Tag: noindex (see NoindexMiddleware) instead of indexing
+        # them blindly from links.
+        self.assertNotIn('Disallow: /users/', body)
+        self.assertNotIn('Disallow: /api/', body)
+
+    def test_noindex_header_on_account_paths(self):
+        for path in ('/users/login/', '/api/'):
+            resp = self.client.get(path)
+            self.assertEqual(
+                resp.get('X-Robots-Tag'), 'noindex, nofollow',
+                f'{path} should carry a noindex header',
+            )
+
+    def test_no_noindex_header_on_public_pages(self):
+        resp = self.client.get('/')
+        self.assertIsNone(resp.get('X-Robots-Tag'))
 
     def test_course_detail_has_og_and_jsonld(self):
         resp = self.client.get(reverse('learning:course_detail', args=[self.course.slug]))
