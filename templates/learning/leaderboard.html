@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% load learning_extras %}
 
-{% block title %}Reyting — Ochiq Kurs{% endblock %}
+{% block title %}Reyting - Ochiq Kurs{% endblock %}
 
 {% block content %}
 <div class="container" style="padding-top:8px">
   <div class="page-head">
     <div>
       <h1>O'quvchilar reytingi</h1>
-      <p class="text-muted">Eng faol o'quvchilar — ko'rilgan darslar va streak bo'yicha.</p>
+      <p class="text-muted">Eng faol o'quvchilar: ko'rilgan darslar va streak bo'yicha.</p>
     </div>
   </div>
 
@@ -54,8 +54,8 @@
       <div class="lt-head">
         <div>O'rin</div>
         <div>O'quvchi</div>
-        <div class="num" title="Ochib ko'rilgan darslar soni (har dars kuniga bir marta) — faollik o'lchovi. Reyting shu ustun bo'yicha.">Ko'rilgan</div>
-        <div class="num" title="Oxirigacha tugatilgan (≥90% ko'rilgan yoki tugatildi deb belgilangan) noyob darslar soni — butun vaqt bo'yicha.">Tugatilgan</div>
+        <div class="num" title="Ochib ko'rilgan darslar soni (har dars kuniga bir marta), faollik o'lchovi. Reyting shu ustun bo'yicha.">Ko'rilgan</div>
+        <div class="num" title="Oxirigacha tugatilgan (≥90% ko'rilgan yoki tugatildi deb belgilangan) noyob darslar soni, butun vaqt bo'yicha.">Tugatilgan</div>
         <div class="num" title="Ketma-ket faol kunlar seriyasi (streak).">Streak</div>
       </div>
       {% for l in leaders %}
@@ -74,8 +74,8 @@
       {% endfor %}
     </div>
     <p class="text-muted" style="margin-top:14px;font-size:.85rem;line-height:1.5">
-      <strong>Ko'rilgan</strong> — ochib ko'rilgan darslar (har dars kuniga bir marta hisoblanadi); reyting shu ustun bo'yicha tuziladi.
-      <strong>Tugatilgan</strong> — oxirigacha (≥90%) o'tilgan darslar soni, butun vaqt bo'yicha.
+      <strong>Ko'rilgan</strong>: ochib ko'rilgan darslar (har dars kuniga bir marta hisoblanadi); reyting shu ustun bo'yicha tuziladi.
+      <strong>Tugatilgan</strong>: oxirigacha (≥90%) o'tilgan darslar soni, butun vaqt bo'yicha.
     </p>
   {% else %}
     <div class="empty-state">

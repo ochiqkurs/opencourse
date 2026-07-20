@@ -2,7 +2,7 @@
 {% load static %}
 {% load learning_extras %}
 
-{% block title %}{{ lesson.title }} — {{ course.title }}{% endblock %}
+{% block title %}{{ lesson.title }} - {{ course.title }}{% endblock %}
 
 {% block extra_head %}{% jsonld jsonld %}{% endblock %}
 
@@ -104,7 +104,7 @@
           <div class="quiz-question-block" data-qid="{{ q.id }}" data-type="{{ q.question_type }}" hidden>
             <div class="qq-text">{{ q.text }}</div>
             {% if q.question_type == 'multi_select' %}
-            <div class="qq-hint">Bir nechta to'g'ri javob bo'lishi mumkin — barchasini tanlang.</div>
+            <div class="qq-hint">Bir nechta to'g'ri javob bo'lishi mumkin, barchasini tanlang.</div>
             {% endif %}
             <div class="qq-choices">
               {% for c in q.choices.all %}
