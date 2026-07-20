@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Kirish – Ochiq Kurs{% endblock %}
+{% block title %}Kirish - Ochiq Kurs{% endblock %}
 
 {% block content %}
 <div class="login-box">
@@ -29,7 +29,7 @@
       <p class="login-alt-label">Telegramsiz qurilmadan kod bilan</p>
       <p class="login-alt-hint">
         <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener noreferrer">@{{ bot_username }}</a>
-        botiga <code class="login-cmd">/login</code> yuboring — bot 6 xonali kod beradi.
+        botiga <code class="login-cmd">/login</code> yuboring; bot 6 xonali kod beradi.
       </p>
       <form method="post" class="login-code-form" novalidate>
         {% csrf_token %}

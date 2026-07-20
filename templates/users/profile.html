@@ -231,8 +231,8 @@
       var lessons = parseInt(cell.dataset.lessons || '0', 10);
       var date = cell.dataset.date;
       tooltip.textContent = lessons > 0
-        ? date + ' — ' + lessons + ' dars'
-        : date + ' — faollik yo\'q';
+        ? date + ': ' + lessons + ' dars'
+        : date + ': faollik yo\'q';
       tooltip.classList.add('visible');
     });
     cell.addEventListener('mousemove', function (e) {
