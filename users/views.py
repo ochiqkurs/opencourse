@@ -20,13 +20,12 @@ from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils.text import slugify
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from learning.models import (
-    Course, Module, Lesson, LessonProgress, LessonView,
+    Course, Lesson, LessonProgress, LessonView,
     Enrollment, Certificate,
 )
 from learning.forms import CourseForm, ModuleForm, LessonForm
@@ -725,6 +724,3 @@ class AdminPanelView(LoginRequiredMixin, View):
                 return redirect('users:admin_panel')
             return render(request, self.template_name, self._context(lesson_form=form, active_tab='lesson'))
         return render(request, self.template_name, self._context())
-
-
-@method_decorator(user_passes_test(lambda u: u.is_staff or u.is_superuser), name='dispatch')
