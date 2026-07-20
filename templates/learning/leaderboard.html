@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load learning_extras %}
 
 {% block title %}Reyting — Ochiq Kurs{% endblock %}
 
@@ -68,7 +69,7 @@
           </div>
           <div class="num">{{ l.views }}</div>
           <div class="num">{{ l.completed }}</div>
-          <div class="num">{% if l.streak %}🔥 {{ l.streak }}{% else %}—{% endif %}</div>
+          <div class="num">{% if l.streak %}<span class="streak-cell">{% lucide 'flame' 15 %}{{ l.streak }}</span>{% else %}—{% endif %}</div>
         </div>
       {% endfor %}
     </div>
