@@ -58,8 +58,6 @@ opencourse/                          # Repository root (also Django project root
 │       ├── lesson_bookmarks.js      # Video timestamp bookmarks: add, delete, seek YT player
 │       ├── ui.js                    # Theme toggle, user dropdown, mobile drawer
 │       └── search.js                # Debounced navbar search suggestions
-├── playlist-fetcher/
-│   └── fetcher.py                   # Standalone YouTube playlist fetching utility
 ├── .github/workflows/
 │   └── deploy.yml                   # CI/CD: push to master → SSH deploy
 ├── manage.py
@@ -183,8 +181,6 @@ Course      (title, slug, subtitle, description, thumbnail, category FK,
 | `/users/parol-ornatish/` | users | Set/change username + password (login required) |
 | `/users/profile/` | users | Dashboard (streak, stats, continue learning, certificates) |
 | `/users/admin/` | users | Admin panel (staff only) |
-| `/users/admin/bulk-create/` | users | Bulk create course tree |
-| `/users/admin/fetch-playlist/` | users | YouTube playlist fetch |
 | `/api/auth/confirm/` | users | Telegram bot callback (bot-link flow) |
 | `/api/auth/issue-code/` | users | Bot mints a 6-digit login code for the user (`X-Bot-Secret`) |
 | `/api/auth/check/<token>/` | users | Browser polling (rate-limited) |
@@ -328,12 +324,6 @@ URL path segments use Uzbek words where possible: `malaka` (skill/course), `qidi
 - Course catalog uses Django `Paginator`, 24 courses per page.
 - Page navigation preserves all active filter query params (category, level, sort, search query).
 - Parameter name: `?sahifa=<N>`.
-
-### Admin Bulk Create
-- Accepts nested JSON: `course → modules → lessons` with YouTube video IDs
-- Auto-generates slugs from titles
-- Optional `include_description` flag to include video descriptions from YouTube
-- YouTube playlist fetch available for automation
 
 ### Course Thumbnails
 - Courses support an optional uploaded thumbnail (`ImageField`)

@@ -12,6 +12,4 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('profile/', views.ProfileView.as_view(), name='profile'),
     path('admin/', views.AdminPanelView.as_view(), name='admin_panel'),
-    path('admin/bulk-create/', views.BulkCreateView.as_view(), name='bulk_create'),
-    path('admin/fetch-playlist/', views.FetchPlaylistView.as_view(), name='fetch_playlist'),
 ]

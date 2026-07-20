@@ -13,7 +13,7 @@ Detailed reference lives in **[`docs/architecture.md`](docs/architecture.md)** �
 - **Repository Structure** — the full directory tree and what each file holds.
 - **Data Models** — every model and its fields (`Course → Module → Lesson`, tracking, engagement, quiz, learning path, video bookmark, user models).
 - **URL Structure** — the complete URL → view map and namespaces.
-- **Key Business Logic** — per-feature behavior (view tracking, streaks, heatmap, certificates, reviews, notes, wishlist, Q&A, announcements, leaderboard, quizzes, bookmarks, learning paths, instructor profiles, pagination, bulk create, thumbnails, course/lesson/dashboard/home page composition).
+- **Key Business Logic** — per-feature behavior (view tracking, streaks, heatmap, certificates, reviews, notes, wishlist, Q&A, announcements, leaderboard, quizzes, bookmarks, learning paths, instructor profiles, pagination, thumbnails, course/lesson/dashboard/home page composition).
 - **Domain Language** — the glossary of terms and Uzbek URL segments.
 
 Keep `docs/architecture.md` in sync when you change models, URLs, or feature behavior — and keep this CLAUDE.md under the 40k-char context limit (move new long-form reference into `docs/`, not here).

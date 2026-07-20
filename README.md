@@ -178,7 +178,6 @@ opencourse/
 ├── static/
 │   ├── css/style.css       # Design system (emerald brand + amber accent)
 │   └── js/                 # Vanilla JS modules (lesson tracker, notes, bookmarks, UI, search)
-├── playlist-fetcher/       # Standalone YouTube playlist fetching utility
 ├── .github/workflows/      # CI/CD
 ├── docs/                   # Architecture reference
 ├── manage.py

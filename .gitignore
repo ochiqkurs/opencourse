@@ -12,4 +12,3 @@ media/
 !.claude/skills
 /venv
 deploy.sh
-playlist-fetcher/output.json
