@@ -8,7 +8,7 @@
 ![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
 # Ochiq Kurs
 
-**Ochiq Kurs** (Ochiq — _open_) is a Django-based Learning Management System for free online video courses in Uzbek. It features YouTube-embedded lessons, article/text lessons, per-lesson quizzes, learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks, and a Udemy-style catalog UI.
+**Ochiq Kurs** (Ochiq — _open_) is a Django-based Learning Management System for free online video courses in Uzbek. It features YouTube-embedded lessons, article/text lessons, per-lesson quizzes, learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, and gamified streaks.
 
 ---
 

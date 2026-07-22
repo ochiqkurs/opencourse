@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, article/text lessons, per-lesson quizzes (multiple-choice + true/false), learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, video timestamp bookmarks, per-lesson Q&A, attachable resources, announcements, a public leaderboard, public certificate verification, instructor profile pages, and a Udemy-style catalog UI with pagination.
+**Ochiq Kurs** is a Django-based Learning Management System (LMS) for open online video courses in Uzbek. It features YouTube-embedded video lessons, article/text lessons, per-lesson quizzes (multiple-choice + true/false), learning paths (multi-course tracks), progress tracking, Telegram-based authentication, Markdown note-taking, gamified streaks with a GitHub-style activity graph, a wishlist, video timestamp bookmarks, per-lesson Q&A, attachable resources, announcements, a public leaderboard, public certificate verification, and instructor profile pages.
 
 ---
 
