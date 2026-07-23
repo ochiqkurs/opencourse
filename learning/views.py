@@ -30,7 +30,7 @@ from .models import (
     VideoBookmark,
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
-from .selectors import course_progress
+from .selectors import course_progress, courses_completion
 from .utils import render_markdown
 
 User = get_user_model()
@@ -1602,26 +1602,12 @@ class LearningPathDetailView(View):
         path_courses = list(path_obj.path_courses.select_related('course').order_by('order'))
         course_ids = [pc.course_id for pc in path_courses]
 
-        lesson_counts = dict(
-            Lesson.objects.filter(module__course_id__in=course_ids)
-            .values_list('module__course_id')
-            .annotate(c=Count('id'))
-        )
-        done_counts = {}
-        if request.user.is_authenticated:
-            done_counts = dict(
-                LessonProgress.objects.filter(
-                    user=request.user,
-                    lesson__module__course_id__in=course_ids,
-                    is_completed=True,
-                ).values_list('lesson__module__course_id').annotate(c=Count('id'))
-            )
+        completion = courses_completion(request.user, course_ids)
 
         for pc in path_courses:
             course = pc.course
             total_courses += 1
-            total_lessons = lesson_counts.get(course.id, 0)
-            done_lessons = done_counts.get(course.id, 0)
+            done_lessons, total_lessons = completion[course.id]
             is_course_complete = total_lessons > 0 and done_lessons >= total_lessons
             if is_course_complete:
                 completed_courses += 1
@@ -1689,18 +1675,10 @@ def _path_is_complete(user, path_obj):
     course_ids = list(path_obj.path_courses.values_list('course_id', flat=True))
     if not course_ids:
         return False
-    lesson_counts = dict(
-        Lesson.objects.filter(module__course_id__in=course_ids)
-        .values_list('module__course_id').annotate(c=Count('id'))
-    )
-    done_counts = dict(
-        LessonProgress.objects.filter(
-            user=user, lesson__module__course_id__in=course_ids, is_completed=True,
-        ).values_list('lesson__module__course_id').annotate(c=Count('id'))
-    )
+    completion = courses_completion(user, course_ids)
     for cid in course_ids:
-        total = lesson_counts.get(cid, 0)
-        if total == 0 or done_counts.get(cid, 0) < total:
+        done, total = completion[cid]
+        if total == 0 or done < total:
             return False
     return True
 

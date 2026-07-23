@@ -8,7 +8,9 @@ a side effect (writes, streak bumps, certificate issuance) belongs in
 
 from dataclasses import dataclass, field
 
-from .models import LessonProgress
+from django.db.models import Count
+
+from .models import Lesson, LessonProgress
 
 
 @dataclass
@@ -105,3 +107,36 @@ def course_progress(course, user, modules=None):
         is_complete=is_complete,
         completed_lesson_ids=completed_ids,
     )
+
+
+def courses_completion(user, course_ids):
+    """Bulk per-course lesson-completion counts for many courses at once.
+
+    Returns ``{course_id: (done_lessons, total_lessons)}`` for every id in
+    ``course_ids``, using two grouped queries regardless of how many courses
+    are asked for (no per-course round-trips). ``user`` may be anonymous, in
+    which case every ``done_lessons`` is ``0``. Use this for course *lists*
+    (learning paths, dashboards); use :func:`course_progress` when you need one
+    course's per-module / next-lesson detail.
+    """
+    total_map = dict(
+        Lesson.objects.filter(module__course_id__in=course_ids)
+        .values_list('module__course_id')
+        .annotate(c=Count('id'))
+    )
+    if user.is_authenticated:
+        done_map = dict(
+            LessonProgress.objects.filter(
+                user=user,
+                lesson__module__course_id__in=course_ids,
+                is_completed=True,
+            )
+            .values_list('lesson__module__course_id')
+            .annotate(c=Count('id'))
+        )
+    else:
+        done_map = {}
+    return {
+        cid: (done_map.get(cid, 0), total_map.get(cid, 0))
+        for cid in course_ids
+    }

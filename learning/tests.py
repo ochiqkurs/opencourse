@@ -764,3 +764,40 @@ class CourseProgressSelectorTests(TestCase):
         self.assertEqual(p.overall_percent, 0)
         self.assertFalse(p.is_complete)
         self.assertIsNone(p.next_lesson)
+
+
+from learning.selectors import courses_completion
+
+
+class CoursesCompletionSelectorTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('pathlearner')
+        self.c1 = Course.objects.create(title='C1', slug='cc1', status='published')
+        self.c2 = Course.objects.create(title='C2', slug='cc2', status='published')
+        m1 = Module.objects.create(title='M', slug='m', course=self.c1, order=0)
+        m2 = Module.objects.create(title='M', slug='m', course=self.c2, order=0)
+        self.c1l1 = Lesson.objects.create(title='A', slug='a', module=m1, order=0)
+        self.c1l2 = Lesson.objects.create(title='B', slug='b', module=m1, order=1)
+        self.c2l1 = Lesson.objects.create(title='C', slug='c', module=m2, order=0)
+
+    def test_counts_done_and_total_per_course(self):
+        LessonProgress.objects.create(user=self.user, lesson=self.c1l1, is_completed=True)
+        LessonProgress.objects.create(user=self.user, lesson=self.c1l2, is_completed=False)
+        m = courses_completion(self.user, [self.c1.id, self.c2.id])
+        self.assertEqual(m[self.c1.id], (1, 2))
+        self.assertEqual(m[self.c2.id], (0, 1))
+
+    def test_anonymous_user_has_zero_done(self):
+        m = courses_completion(AnonymousUser(), [self.c1.id, self.c2.id])
+        self.assertEqual(m[self.c1.id], (0, 2))
+        self.assertEqual(m[self.c2.id], (0, 1))
+
+    def test_every_requested_id_is_present_even_with_no_lessons(self):
+        empty = Course.objects.create(title='E', slug='cc-empty', status='published')
+        m = courses_completion(self.user, [empty.id])
+        self.assertEqual(m[empty.id], (0, 0))
+
+    def test_two_queries_regardless_of_course_count(self):
+        # One grouped query for totals, one for done counts — no per-course fan-out.
+        with self.assertNumQueries(2):
+            courses_completion(self.user, [self.c1.id, self.c2.id])
