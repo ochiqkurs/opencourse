@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
-from .models import Category, Course, LearningPath
+from .models import Category, Course, LearningPath, Lesson, Module
 
 User = get_user_model()
 
@@ -34,6 +34,43 @@ class CourseSitemap(Sitemap):
 
     def lastmod(self, obj):
         return obj.published_at
+
+
+class ModuleSitemap(Sitemap):
+    protocol = 'https'
+    changefreq = 'monthly'
+    priority = 0.5
+
+    def items(self):
+        return (
+            Module.objects
+            .filter(course__status='published')
+            .select_related('course')
+            .order_by('course__slug', 'order')
+        )
+
+    def location(self, obj):
+        return reverse('learning:module_detail', args=[obj.course.slug, obj.slug])
+
+    def lastmod(self, obj):
+        return obj.course.published_at
+
+
+class LessonSitemap(Sitemap):
+    protocol = 'https'
+    changefreq = 'monthly'
+    priority = 0.6
+
+    def items(self):
+        return (
+            Lesson.objects
+            .filter(module__course__status='published')
+            .select_related('module__course')
+            .order_by('module__course__slug', 'module__order', 'order')
+        )
+
+    def lastmod(self, obj):
+        return obj.module.course.published_at
 
 
 class CategorySitemap(Sitemap):
@@ -76,6 +113,8 @@ class InstructorSitemap(Sitemap):
 SITEMAPS = {
     'static': StaticViewSitemap,
     'courses': CourseSitemap,
+    'modules': ModuleSitemap,
+    'lessons': LessonSitemap,
     'categories': CategorySitemap,
     'paths': LearningPathSitemap,
     'instructors': InstructorSitemap,

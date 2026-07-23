@@ -1,4 +1,4 @@
-{% load static %}
+{% load static learning_extras %}
 <!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -8,6 +8,7 @@
   <link rel="icon" href="{% static 'images/favicon.png' %}" type="image/png">
   <title>{% block title %}Ochiq Kurs - O'zbekcha onlayn ta'lim platformasi{% endblock %}</title>
   {% include "includes/seo_meta.html" %}
+  {% if jsonld %}{% jsonld jsonld %}{% endif %}
 
   <!-- Theme bootstrap (prevents flash) -->
   <script>

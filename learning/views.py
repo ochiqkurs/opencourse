@@ -1,6 +1,7 @@
 import json
 import pytz
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -8,14 +9,16 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Sum, Q, OuterRef, Subquery, IntegerField
 from django.db.models.functions import Coalesce
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.text import Truncator
 from django.views import View
+from django.views.decorators.cache import cache_page
 
 from .context_processors import absolute_url
 from .models import (
@@ -48,8 +51,37 @@ def _meta_desc(*candidates, limit=160):
     return ''
 
 
-def _course_jsonld(course):
-    """schema.org/Course structured data for rich search results."""
+def _iso_duration(seconds):
+    """ISO-8601 duration (e.g. PT1H23M45S) from seconds, or None."""
+    seconds = int(seconds or 0)
+    if seconds <= 0:
+        return None
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    parts = (f'{h}H' if h else '') + (f'{m}M' if m else '') + (f'{s}S' if s else '')
+    return f'PT{parts}'
+
+
+def _breadcrumb_jsonld(*crumbs):
+    """schema.org/BreadcrumbList from (name, path) pairs."""
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        'itemListElement': [
+            {'@type': 'ListItem', 'position': i, 'name': name,
+             'item': absolute_url(path)}
+            for i, (name, path) in enumerate(crumbs, start=1)
+        ],
+    }
+
+
+def _course_jsonld(course, total_duration=None):
+    """schema.org/Course structured data for rich search results.
+
+    `hasCourseInstance` (with courseMode + courseWorkload) is what makes the
+    course eligible for Google's Course rich results, so pass `total_duration`
+    (seconds) whenever the caller has it.
+    """
     data = {
         '@context': 'https://schema.org',
         '@type': 'Course',
@@ -66,6 +98,14 @@ def _course_jsonld(course):
         'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'UZS',
                    'availability': 'https://schema.org/InStock'},
     }
+    instance = {'@type': 'CourseInstance', 'courseMode': 'Online',
+                'courseLanguage': 'uz'}
+    workload = _iso_duration(total_duration)
+    if workload:
+        instance['courseWorkload'] = workload
+    data['hasCourseInstance'] = [instance]
+    if course.published_at:
+        data['datePublished'] = course.published_at.date().isoformat()
     thumb = course.get_thumbnail_url()
     if thumb:
         data['image'] = absolute_url(thumb)
@@ -105,33 +145,59 @@ def _home_jsonld():
             '@type': 'Organization',
             'name': 'Ochiq Kurs',
             'url': absolute_url('/'),
+            'logo': absolute_url(static('images/favicon.png')),
+            'sameAs': [f'https://t.me/{settings.TELEGRAM_BOT_USERNAME}'],
         },
     ]
 
 
 def _lesson_jsonld(lesson, course):
-    """schema.org/VideoObject for a video lesson — eligible for Google video
-    rich results. Returns None for non-video lessons."""
-    if lesson.lesson_type != 'video' or not lesson.youtube_video_id:
-        return None
-    vid = lesson.youtube_video_id
-    data = {
-        '@context': 'https://schema.org',
-        '@type': 'VideoObject',
-        'name': lesson.title,
-        'description': _meta_desc(lesson.description, lesson.title),
-        'thumbnailUrl': f'https://img.youtube.com/vi/{vid}/hqdefault.jpg',
-        'embedUrl': f'https://www.youtube.com/embed/{vid}',
-        'url': absolute_url(lesson.get_absolute_url()),
-        'inLanguage': 'uz',
-    }
-    if course.published_at:
-        data['uploadDate'] = course.published_at.date().isoformat()
-    if lesson.duration_seconds:
-        # ISO-8601 duration, e.g. PT12M34S
-        m, s = divmod(int(lesson.duration_seconds), 60)
-        data['duration'] = f'PT{m}M{s}S'
-    return data
+    """Structured data for a lesson page: VideoObject for video lessons
+    (eligible for Google video rich results), Article for article/konspekt
+    lessons. Returns None for quiz lessons."""
+    part_of = {'@type': 'Course', 'name': course.title,
+               'url': absolute_url(course.get_absolute_url())}
+
+    if lesson.lesson_type == 'video' and lesson.youtube_video_id:
+        vid = lesson.youtube_video_id
+        data = {
+            '@context': 'https://schema.org',
+            '@type': 'VideoObject',
+            'name': lesson.title,
+            'description': _meta_desc(lesson.description, lesson.title),
+            'thumbnailUrl': f'https://img.youtube.com/vi/{vid}/hqdefault.jpg',
+            'embedUrl': f'https://www.youtube.com/embed/{vid}',
+            'url': absolute_url(lesson.get_absolute_url()),
+            'inLanguage': 'uz',
+            'isPartOf': part_of,
+        }
+        if course.published_at:
+            data['uploadDate'] = course.published_at.date().isoformat()
+        duration = _iso_duration(lesson.duration_seconds)
+        if duration:
+            data['duration'] = duration
+        return data
+
+    if lesson.lesson_type == 'article' and lesson.content:
+        data = {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            'headline': lesson.title,
+            'description': _meta_desc(lesson.description, course.subtitle, lesson.title),
+            'url': absolute_url(lesson.get_absolute_url()),
+            'inLanguage': 'uz',
+            'isPartOf': part_of,
+            'isAccessibleForFree': True,
+            'publisher': {'@type': 'Organization', 'name': 'Ochiq Kurs',
+                          'url': absolute_url('/')},
+        }
+        if course.instructor_name:
+            data['author'] = {'@type': 'Person', 'name': course.instructor_name}
+        if course.published_at:
+            data['datePublished'] = course.published_at.date().isoformat()
+        return data
+
+    return None
 
 
 def _course_card_annotations(qs):
@@ -383,6 +449,12 @@ class CourseListView(View):
             'q': q,
             'level_choices': Course.LEVEL_CHOICES,
             'wishlist_ids': _user_wishlist_ids(request.user),
+            'meta_description': (
+                f"{paginator.count} ta o'zbek tilidagi bepul onlayn kurs: dasturlash, "
+                "dizayn, ma'lumotlar tahlili va boshqa yo'nalishlar. Video darslar, "
+                "konspektlar va testlar bilan."
+            ),
+            'og_title': 'Barcha kurslar — Ochiq Kurs',
         })
 
 
@@ -409,6 +481,11 @@ class CategoryDetailView(View):
                 f"{category.name} yo'nalishidagi o'zbek tilidagi bepul onlayn kurslar.",
             ),
             'og_title': f"{category.name} kurslari — Ochiq Kurs",
+            'jsonld': _breadcrumb_jsonld(
+                ('Bosh sahifa', '/'),
+                ('Kurslar', reverse('learning:course_list')),
+                (category.name, category.get_absolute_url()),
+            ),
         })
 
 
@@ -463,6 +540,10 @@ class SearchView(View):
             'lessons': lessons,
             'result_count': len(courses) + len(lessons),
             'wishlist_ids': _user_wishlist_ids(request.user),
+            # Internal search results shouldn't be indexed (crawl waste /
+            # thin-content risk); links on the page are still followed.
+            'meta_robots': 'noindex, follow',
+            'og_title': 'Qidiruv — Ochiq Kurs',
         })
 
 
@@ -599,7 +680,14 @@ class CourseDetailView(View):
             'og_title': course.title,
             'og_image': absolute_url(course.get_thumbnail_url()),
             'og_type': 'website',
-            'jsonld': _course_jsonld(course),
+            'jsonld': [
+                _course_jsonld(course, total_duration),
+                _breadcrumb_jsonld(
+                    ('Bosh sahifa', '/'),
+                    ('Kurslar', reverse('learning:course_list')),
+                    (course.title, course.get_absolute_url()),
+                ),
+            ],
         }
         return render(request, self.template_name, ctx)
 
@@ -639,6 +727,17 @@ class ModuleDetailView(View):
             'module': module,
             'lessons': lessons,
             'module_description_html': mark_safe(render_markdown(module.description)) if module.description else '',
+            # SEO
+            'meta_description': _meta_desc(module.description, course.subtitle, course.title),
+            'og_title': f'{module.title} — {course.title}',
+            'og_image': absolute_url(course.get_thumbnail_url()),
+            'jsonld': _breadcrumb_jsonld(
+                ('Bosh sahifa', '/'),
+                ('Kurslar', reverse('learning:course_list')),
+                (course.title, course.get_absolute_url()),
+                (module.title, reverse('learning:module_detail',
+                                       args=[course.slug, module.slug])),
+            ),
         }
         return render(request, self.template_name, ctx)
 
@@ -821,7 +920,17 @@ class LessonDetailView(View):
             'og_title': f'{lesson.title} — {course.title}',
             'og_image': absolute_url(course.get_thumbnail_url()),
             'og_type': 'video.other' if lesson.lesson_type == 'video' else 'article',
-            'jsonld': _lesson_jsonld(lesson, course),
+            'jsonld': [d for d in (
+                _lesson_jsonld(lesson, course),
+                _breadcrumb_jsonld(
+                    ('Bosh sahifa', '/'),
+                    ('Kurslar', reverse('learning:course_list')),
+                    (course.title, course.get_absolute_url()),
+                    (module.title, reverse('learning:module_detail',
+                                           args=[course.slug, module.slug])),
+                    (lesson.title, lesson.get_absolute_url()),
+                ),
+            ) if d],
         }
         return render(request, self.template_name, ctx)
 
@@ -1205,6 +1314,11 @@ def leaderboard_view(request):
     return render(request, 'learning/leaderboard.html', {
         'leaders': leaders,
         'period': period,
+        'meta_description': (
+            "Ochiq Kurs reytingi — eng faol o'quvchilar: ko'rilgan darslar, "
+            "tugatilgan darslar va kunlik streaklar bo'yicha ochiq jadval."
+        ),
+        'og_title': 'Reyting — Ochiq Kurs',
     })
 
 
@@ -1505,6 +1619,12 @@ class LearningPathListView(View):
         return render(request, self.template_name, {
             'paths': paths,
             'enrolled_ids': enrolled_ids,
+            'meta_description': (
+                "O'quv yo'nalishlari — bir necha kursdan iborat tayyor o'quv "
+                "rejalari. Frontend, Python backend, ma'lumotlar tahlili va AI "
+                "yo'nalishlarini bepul o'rganing."
+            ),
+            'og_title': "Yo'nalishlar — Ochiq Kurs",
         })
 
 
@@ -1578,6 +1698,26 @@ class LearningPathDetailView(View):
             'meta_description': _meta_desc(path_obj.description, path_obj.title),
             'og_title': f'{path_obj.title} — Ochiq Kurs',
             'og_image': absolute_url(path_obj.thumbnail.url) if path_obj.thumbnail else None,
+            'jsonld': [
+                {
+                    '@context': 'https://schema.org',
+                    '@type': 'ItemList',
+                    'name': path_obj.title,
+                    'description': _meta_desc(path_obj.description, path_obj.title),
+                    'itemListElement': [
+                        {'@type': 'ListItem', 'position': i,
+                         'name': cd['course'].title,
+                         'url': absolute_url(cd['course'].get_absolute_url())}
+                        for i, cd in enumerate(courses_data, start=1)
+                    ],
+                },
+                _breadcrumb_jsonld(
+                    ('Bosh sahifa', '/'),
+                    ("Yo'nalishlar", reverse('learning:learning_path_list')),
+                    (path_obj.title, reverse('learning:learning_path_detail',
+                                             args=[path_obj.slug])),
+                ),
+            ],
         }
         return render(request, self.template_name, ctx)
 
@@ -1689,4 +1829,77 @@ class InstructorDetailView(View):
             ),
             'og_title': f'{display_name} — Ochiq Kurs',
             'og_image': profile.photo_url if profile and profile.photo_url else None,
+            'jsonld': {
+                '@context': 'https://schema.org',
+                '@type': 'Person',
+                'name': display_name,
+                'url': absolute_url(reverse('learning:instructor_detail',
+                                            args=[instructor.username])),
+                'jobTitle': "O'qituvchi",
+                'worksFor': {'@type': 'Organization', 'name': 'Ochiq Kurs',
+                             'url': absolute_url('/')},
+                **({'image': absolute_url(profile.photo_url)}
+                   if profile and profile.photo_url else {}),
+                **({'description': _meta_desc(bio)} if bio else {}),
+            },
         })
+
+
+# ---------------------------------------------------------------------------
+# /llms.txt — GEO: a Markdown map of the site for AI assistants/crawlers
+# ---------------------------------------------------------------------------
+
+@cache_page(3600)
+def llms_txt(request):
+    """llms.txt (llmstxt.org): a Markdown summary of the platform with links to
+    every learning path, category and published course, so AI assistants can
+    discover and cite the content without crawling the whole site."""
+    paths = list(LearningPath.objects.order_by('order', 'title'))
+    categories = list(Category.objects.order_by('order', 'name'))
+    courses = list(
+        Course.objects.filter(status='published')
+        .select_related('category')
+        .order_by('category__order', 'category__name', 'order')
+    )
+
+    lines = [
+        "# Ochiq Kurs",
+        "",
+        f"> O'zbek tilidagi bepul onlayn ta'lim platformasi: {len(courses)} ta "
+        "video kurs, modul konspektlari (maqolalar) va testlar. Barcha kontent "
+        "ochiq — darslarni o'qish va ko'rish uchun ro'yxatdan o'tish shart emas.",
+        "",
+        "Har bir kurs YouTube video darslar, matnli konspektlar va testlardan "
+        "iborat. Sayt tili — o'zbekcha. Sertifikatlar ochiq havola orqali "
+        "tekshiriladi.",
+        "",
+        "## Yo'nalishlar (o'quv rejalari)",
+        "",
+    ]
+    for p in paths:
+        url = absolute_url(reverse('learning:learning_path_detail', args=[p.slug]))
+        desc = _meta_desc(p.description, limit=120)
+        lines.append(f"- [{p.title}]({url})" + (f": {desc}" if desc else ""))
+
+    lines += ["", "## Kategoriyalar", ""]
+    for c in categories:
+        lines.append(f"- [{c.name}]({absolute_url(c.get_absolute_url())})")
+
+    lines += ["", "## Kurslar", ""]
+    for course in courses:
+        url = absolute_url(course.get_absolute_url())
+        extra = _meta_desc(course.subtitle, limit=120)
+        if course.instructor_name:
+            extra = f"{course.instructor_name}. {extra}" if extra else course.instructor_name
+        lines.append(f"- [{course.title}]({url})" + (f": {extra}" if extra else ""))
+
+    lines += [
+        "",
+        "## Qo'shimcha",
+        "",
+        f"- [Barcha kurslar katalogi]({absolute_url(reverse('learning:course_list'))})",
+        f"- [O'quvchilar reytingi]({absolute_url(reverse('learning:leaderboard'))})",
+        f"- [Sayt xaritasi]({absolute_url('/sitemap.xml')})",
+    ]
+    return HttpResponse("\n".join(lines) + "\n",
+                        content_type="text/plain; charset=utf-8")

@@ -5,11 +5,23 @@ from django.contrib.sitemaps.views import sitemap
 from django.http import HttpResponse
 from django.urls import path, include
 from learning.sitemaps import SITEMAPS
-from learning.views import HomeView
+from learning.views import HomeView, llms_txt
 from users.views import (
     TelegramConfirmView, CheckTokenView, IssueCodeView, BotStartView,
     ContactsListView, MarkBlockedView,
 )
+
+
+# AI assistant/search crawlers we explicitly welcome (GEO). `User-agent: *`
+# already allows them, but a named group is a durable, declarative signal that
+# survives future edits to the wildcard rules.
+AI_CRAWLERS = [
+    "GPTBot", "OAI-SearchBot", "ChatGPT-User",
+    "ClaudeBot", "Claude-User", "Claude-SearchBot",
+    "PerplexityBot", "Perplexity-User",
+    "Google-Extended", "Applebot-Extended",
+    "meta-externalagent", "CCBot", "DuckAssistBot", "Amazonbot",
+]
 
 
 def robots_txt(request):
@@ -23,8 +35,10 @@ def robots_txt(request):
         "Disallow: /admin/",
         "Allow: /",
         "",
-        f"Sitemap: {settings.SITE_URL.rstrip('/')}/sitemap.xml",
     ]
+    for bot in AI_CRAWLERS:
+        lines += [f"User-agent: {bot}", "Disallow: /admin/", "Allow: /", ""]
+    lines.append(f"Sitemap: {settings.SITE_URL.rstrip('/')}/sitemap.xml")
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
 
 
@@ -47,6 +61,7 @@ urlpatterns = [
     path('api/telemetry/mark-blocked/', MarkBlockedView.as_view(), name='bot_mark_blocked'),
     path('sitemap.xml', sitemap, {'sitemaps': SITEMAPS}, name='sitemap'),
     path('robots.txt', robots_txt, name='robots'),
+    path('llms.txt', llms_txt, name='llms'),
     path('', HomeView.as_view(), name='home'),
 ]
 

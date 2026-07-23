@@ -2,6 +2,7 @@
 and may be overridden per-page by view context (meta_description, og_title,
 og_image, og_type).{% endcomment %}
 <meta name="description" content="{{ meta_description }}">
+{% if meta_robots %}<meta name="robots" content="{{ meta_robots }}">{% endif %}
 <link rel="canonical" href="{{ canonical_url }}">
 
 {# Open Graph #}

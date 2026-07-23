@@ -609,3 +609,84 @@ class SeoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.content.decode().strip(),
                          'google-site-verification: googletest123.html')
+
+
+@override_settings(**_SEO_OVERRIDES, CACHES={
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+})
+class SeoDiscoveryTests(TestCase):
+    """The SEO/GEO expansion: lessons/modules in the sitemap, llms.txt,
+    AI-crawler groups in robots.txt, noindex on search, and the richer
+    JSON-LD (hasCourseInstance, BreadcrumbList, Article for konspekts)."""
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            title='Django Kursi', slug='django-kursi',
+            subtitle='Web dasturlash', status='published',
+            instructor_name='Ali Valiyev',
+        )
+        self.module = Module.objects.create(
+            title='Kirish', slug='kirish', course=self.course, order=0)
+        self.video = Lesson.objects.create(
+            title='Video dars', slug='video-dars', module=self.module,
+            lesson_type='video', youtube_video_id='xyz', duration_seconds=300, order=0)
+        self.article = Lesson.objects.create(
+            title='Konspekt', slug='konspekt', module=self.module,
+            lesson_type='article', content='# Sarlavha\n\nMatn.', order=1)
+        draft = Course.objects.create(title='Draft', slug='draft-kurs', status='draft')
+        draft_mod = Module.objects.create(title='DM', slug='dm', course=draft, order=0)
+        self.draft_lesson = Lesson.objects.create(
+            title='DL', slug='dl', module=draft_mod, lesson_type='video',
+            youtube_video_id='qqq', order=0)
+
+    def test_sitemap_includes_lessons_and_modules(self):
+        body = self.client.get('/sitemap.xml').content.decode()
+        self.assertIn('/malaka/django-kursi/kirish/video-dars/', body)
+        self.assertIn('/malaka/django-kursi/kirish/konspekt/', body)
+        self.assertIn('/malaka/django-kursi/kirish/', body)
+
+    def test_sitemap_excludes_draft_course_lessons(self):
+        body = self.client.get('/sitemap.xml').content.decode()
+        self.assertNotIn('/malaka/draft-kurs/', body)
+
+    def test_llms_txt(self):
+        resp = self.client.get('/llms.txt')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp['Content-Type'].startswith('text/plain'))
+        body = resp.content.decode()
+        self.assertIn('# Ochiq Kurs', body)
+        self.assertIn('Django Kursi', body)
+        self.assertIn('https://ochiqkurs.uz/malaka/django-kursi/', body)
+        self.assertNotIn('Draft', body)
+
+    def test_robots_txt_welcomes_ai_crawlers(self):
+        body = self.client.get('/robots.txt').content.decode()
+        for bot in ('GPTBot', 'ClaudeBot', 'PerplexityBot'):
+            self.assertIn(f'User-agent: {bot}', body)
+
+    def test_search_results_are_noindexed(self):
+        resp = self.client.get(reverse('learning:search') + '?q=django')
+        self.assertIn('<meta name="robots" content="noindex, follow">',
+                      resp.content.decode())
+        # Public pages must NOT get the tag.
+        self.assertNotIn('name="robots"',
+                         self.client.get(reverse('home')).content.decode())
+
+    def test_course_jsonld_has_course_instance_and_breadcrumbs(self):
+        html = self.client.get(self.course.get_absolute_url()).content.decode()
+        self.assertIn('"hasCourseInstance"', html)
+        self.assertIn('"courseWorkload": "PT5M"', html)
+        self.assertIn('"@type": "BreadcrumbList"', html)
+
+    def test_article_lesson_emits_article_jsonld(self):
+        html = self.client.get(self.article.get_absolute_url()).content.decode()
+        self.assertIn('"@type": "Article"', html)
+        self.assertIn('"@type": "BreadcrumbList"', html)
+        self.assertIn('Ali Valiyev', html)
+
+    def test_module_page_has_meta_and_breadcrumbs(self):
+        url = reverse('learning:module_detail',
+                      args=[self.course.slug, self.module.slug])
+        html = self.client.get(url).content.decode()
+        self.assertIn('"@type": "BreadcrumbList"', html)
+        self.assertIn('og:title', html)
