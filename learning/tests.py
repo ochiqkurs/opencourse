@@ -690,3 +690,77 @@ class SeoDiscoveryTests(TestCase):
         html = self.client.get(url).content.decode()
         self.assertIn('"@type": "BreadcrumbList"', html)
         self.assertIn('og:title', html)
+
+
+# ---------------------------------------------------------------------------
+# selectors.course_progress — exercised directly, with no request/HTTP cycle.
+# ---------------------------------------------------------------------------
+from django.contrib.auth.models import AnonymousUser
+from learning.selectors import course_progress
+
+
+class CourseProgressSelectorTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('learner')
+        self.course = Course.objects.create(title='C', slug='cp', status='published')
+        self.m1 = Module.objects.create(title='M1', slug='m1', course=self.course, order=0)
+        self.m2 = Module.objects.create(title='M2', slug='m2', course=self.course, order=1)
+        # M1: two 60s lessons; M2: one 120s lesson.
+        self.l1 = Lesson.objects.create(title='L1', slug='l1', module=self.m1, order=0, duration_seconds=60)
+        self.l2 = Lesson.objects.create(title='L2', slug='l2', module=self.m1, order=1, duration_seconds=60)
+        self.l3 = Lesson.objects.create(title='L3', slug='l3', module=self.m2, order=0, duration_seconds=120)
+
+    def test_anonymous_user_reads_as_not_started(self):
+        p = course_progress(self.course, AnonymousUser())
+        self.assertEqual(p.total_lessons, 3)
+        self.assertEqual(p.total_completed, 0)
+        self.assertEqual(p.total_duration, 240)
+        self.assertEqual(p.overall_percent, 0)
+        self.assertFalse(p.is_complete)
+        self.assertEqual(p.completed_lesson_ids, set())
+        # next_lesson is the very first lesson in curriculum order.
+        self.assertEqual(p.next_lesson, self.l1)
+
+    def test_partial_progress_aggregates_per_module_and_overall(self):
+        LessonProgress.objects.create(user=self.user, lesson=self.l1, is_completed=True)
+        p = course_progress(self.course, self.user)
+
+        self.assertEqual(p.total_completed, 1)
+        self.assertEqual(p.overall_percent, 33)          # 1 of 3
+        self.assertEqual(p.completed_lesson_ids, {self.l1.id})
+        self.assertFalse(p.is_complete)
+        # next_lesson skips the completed l1 → l2.
+        self.assertEqual(p.next_lesson, self.l2)
+
+        m1_data, m2_data = p.modules_data
+        self.assertEqual(m1_data['completed'], 1)
+        self.assertEqual(m1_data['total'], 2)
+        self.assertEqual(m1_data['percent'], 50)
+        self.assertEqual(m1_data['total_seconds'], 120)
+        self.assertEqual(m2_data['percent'], 0)
+        # Each lesson carries its own .progress (None when untouched).
+        self.assertIsNotNone(m1_data['lessons'][0].progress)
+        self.assertIsNone(m1_data['lessons'][1].progress)
+
+    def test_all_complete_sets_is_complete_and_no_next_lesson(self):
+        for lesson in (self.l1, self.l2, self.l3):
+            LessonProgress.objects.create(user=self.user, lesson=lesson, is_completed=True)
+        p = course_progress(self.course, self.user)
+        self.assertTrue(p.is_complete)
+        self.assertEqual(p.overall_percent, 100)
+        self.assertIsNone(p.next_lesson)
+        self.assertEqual(p.completed_lesson_ids, {self.l1.id, self.l2.id, self.l3.id})
+
+    def test_passed_modules_list_is_reused(self):
+        modules = list(self.course.modules.prefetch_related('lessons').order_by('order'))
+        p = course_progress(self.course, self.user, modules=modules)
+        # Same Module instances flow through into modules_data (no refetch).
+        self.assertIs(p.modules_data[0]['module'], modules[0])
+
+    def test_empty_course_is_not_complete(self):
+        empty = Course.objects.create(title='E', slug='cp-empty', status='published')
+        p = course_progress(empty, self.user)
+        self.assertEqual(p.total_lessons, 0)
+        self.assertEqual(p.overall_percent, 0)
+        self.assertFalse(p.is_complete)
+        self.assertIsNone(p.next_lesson)

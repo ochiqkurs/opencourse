@@ -30,6 +30,7 @@ from .models import (
     VideoBookmark,
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
+from .selectors import course_progress
 from .utils import render_markdown
 
 User = get_user_model()
@@ -567,61 +568,18 @@ class CourseDetailView(View):
             .order_by('order')
         )
 
-        next_lesson = None
-        modules_data = []
+        progress = course_progress(course, request.user, modules=modules)
 
         if request.user.is_authenticated:
-            all_lesson_ids = [
-                lesson.id
-                for module in modules
-                for lesson in module.lessons.all()
-            ]
-            progress_map = {
-                p.lesson_id: p
-                for p in LessonProgress.objects.filter(
-                    user=request.user,
-                    lesson_id__in=all_lesson_ids,
-                )
-            }
             is_enrolled = Enrollment.objects.filter(user=request.user, course=course).exists()
             user_review = CourseReview.objects.filter(user=request.user, course=course).first()
             has_certificate = Certificate.objects.filter(user=request.user, course=course).exists()
             is_wishlisted = Wishlist.objects.filter(user=request.user, course=course).exists()
         else:
-            progress_map = {}
             is_enrolled = False
             user_review = None
             has_certificate = False
             is_wishlisted = False
-
-        for module in modules:
-            lessons = list(module.lessons.order_by('order'))
-            total = len(lessons)
-            completed = 0
-            total_seconds = sum(l.duration_seconds or 0 for l in lessons)
-
-            for lesson in lessons:
-                lesson.progress = progress_map.get(lesson.id)
-                if lesson.progress and lesson.progress.is_completed:
-                    completed += 1
-                elif next_lesson is None:
-                    next_lesson = lesson
-
-            percent = int(completed / total * 100) if total else 0
-            modules_data.append({
-                'module': module,
-                'lessons': lessons,
-                'total': total,
-                'completed': completed,
-                'percent': percent,
-                'total_seconds': total_seconds,
-            })
-
-        total_lessons = sum(m['total'] for m in modules_data)
-        total_duration = sum(m['total_seconds'] for m in modules_data)
-        total_completed = sum(m['completed'] for m in modules_data)
-        overall_percent = int(total_completed / total_lessons * 100) if total_lessons else 0
-        is_complete = total_lessons > 0 and total_completed == total_lessons
 
         # Certificates are issued by the completion endpoints (mark_complete /
         # record_view / quiz) and by the explicit /sertifikat/ view — not as a
@@ -658,12 +616,12 @@ class CourseDetailView(View):
 
         ctx = {
             'course': course,
-            'modules_data': modules_data,
-            'next_lesson': next_lesson,
-            'total_lessons': total_lessons,
-            'total_duration': total_duration,
-            'overall_percent': overall_percent,
-            'is_complete': is_complete,
+            'modules_data': progress.modules_data,
+            'next_lesson': progress.next_lesson,
+            'total_lessons': progress.total_lessons,
+            'total_duration': progress.total_duration,
+            'overall_percent': progress.overall_percent,
+            'is_complete': progress.is_complete,
             'is_enrolled': is_enrolled,
             'has_certificate': has_certificate,
             'is_wishlisted': is_wishlisted,
@@ -681,7 +639,7 @@ class CourseDetailView(View):
             'og_image': absolute_url(course.get_thumbnail_url()),
             'og_type': 'website',
             'jsonld': [
-                _course_jsonld(course, total_duration),
+                _course_jsonld(course, progress.total_duration),
                 _breadcrumb_jsonld(
                     ('Bosh sahifa', '/'),
                     ('Kurslar', reverse('learning:course_list')),
@@ -850,21 +808,15 @@ class LessonDetailView(View):
 
         prev_lesson, next_lesson = _adjacent_lessons(course, module, lesson)
 
-        sidebar_modules = course.modules.prefetch_related('lessons').order_by('order')
+        sidebar_modules = list(
+            course.modules.prefetch_related('lessons').order_by('order')
+        )
 
-        if request.user.is_authenticated:
-            all_ids = list(Lesson.objects.filter(module__course=course).values_list('id', flat=True))
-            done_ids = set(
-                LessonProgress.objects
-                .filter(user=request.user, lesson_id__in=all_ids, is_completed=True)
-                .values_list('lesson_id', flat=True)
-            )
-        else:
-            done_ids = set()
-
-        total_in_course = Lesson.objects.filter(module__course=course).count()
-        completed_in_course = len(done_ids)
-        course_percent = int(completed_in_course / total_in_course * 100) if total_in_course else 0
+        progress_summary = course_progress(course, request.user, modules=sidebar_modules)
+        done_ids = progress_summary.completed_lesson_ids
+        total_in_course = progress_summary.total_lessons
+        completed_in_course = progress_summary.total_completed
+        course_percent = progress_summary.overall_percent
 
         announcements = list(
             Announcement.objects.filter(
