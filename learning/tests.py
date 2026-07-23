@@ -156,7 +156,8 @@ from django.contrib.auth.models import User as _User
 from django.core.cache import cache as _cache
 from django.utils import timezone as _tz
 from users.models import TelegramAuthToken, TelegramContact, TelegramProfile, UserProfile
-from learning.views import _update_streak, _maybe_issue_certificate, _today_uzt
+from learning.services import update_streak, issue_certificate_if_complete
+from learning.utils import today_uzt
 
 # Use a known bot secret, an in-memory cache (the prod DB cache table is not
 # created in the test DB), and the plain static backend (no manifest in tests).
@@ -383,24 +384,24 @@ class CheckTokenTests(TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Streak logic (_update_streak / UserProfile.live_streak)
+# Streak logic (services.update_streak / UserProfile.live_streak)
 # ═══════════════════════════════════════════════════════════════
 class StreakTests(TestCase):
     def setUp(self):
         self.user = _User.objects.create_user(username='streaker', password='pw-12345!x')
-        self.today = _today_uzt()
+        self.today = today_uzt()
 
     def _p(self):
         return UserProfile.objects.get(user=self.user)
 
     def test_first_activity_starts_at_one(self):
-        _update_streak(self.user)
+        update_streak(self.user)
         self.assertEqual(self._p().current_streak, 1)
 
     def test_consecutive_day_increments(self):
         UserProfile.objects.create(user=self.user, current_streak=3, longest_streak=3,
                                    last_activity_date=self.today - _td(days=1))
-        _update_streak(self.user)
+        update_streak(self.user)
         p = self._p()
         self.assertEqual(p.current_streak, 4)
         self.assertEqual(p.longest_streak, 4)
@@ -408,7 +409,7 @@ class StreakTests(TestCase):
     def test_gap_resets_to_one_but_keeps_record(self):
         UserProfile.objects.create(user=self.user, current_streak=9, longest_streak=9,
                                    last_activity_date=self.today - _td(days=3))
-        _update_streak(self.user)
+        update_streak(self.user)
         p = self._p()
         self.assertEqual(p.current_streak, 1)
         self.assertEqual(p.longest_streak, 9)
@@ -416,7 +417,7 @@ class StreakTests(TestCase):
     def test_same_day_is_noop(self):
         UserProfile.objects.create(user=self.user, current_streak=5, longest_streak=5,
                                    last_activity_date=self.today)
-        _update_streak(self.user)
+        update_streak(self.user)
         self.assertEqual(self._p().current_streak, 5)
 
     def test_live_streak_zero_after_lapse(self):
@@ -431,7 +432,7 @@ class StreakTests(TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Certificate auto-issue (_maybe_issue_certificate)
+# Certificate auto-issue (services.issue_certificate_if_complete)
 # ═══════════════════════════════════════════════════════════════
 class CertificateAutoIssueTests(TestCase):
     def setUp(self):
@@ -443,18 +444,18 @@ class CertificateAutoIssueTests(TestCase):
 
     def test_partial_completion_no_certificate(self):
         LessonProgress.objects.create(user=self.user, lesson=self.l1, is_completed=True)
-        _maybe_issue_certificate(self.user, self.course)
+        issue_certificate_if_complete(self.user, self.course)
         self.assertFalse(Certificate.objects.filter(user=self.user, course=self.course).exists())
 
     def test_full_completion_issues_certificate(self):
         LessonProgress.objects.create(user=self.user, lesson=self.l1, is_completed=True)
         LessonProgress.objects.create(user=self.user, lesson=self.l2, is_completed=True)
-        _maybe_issue_certificate(self.user, self.course)
+        issue_certificate_if_complete(self.user, self.course)
         self.assertTrue(Certificate.objects.filter(user=self.user, course=self.course).exists())
 
     def test_empty_course_never_certifies(self):
         empty = Course.objects.create(title='E', slug='ee', status='published')
-        _maybe_issue_certificate(self.user, empty)
+        issue_certificate_if_complete(self.user, empty)
         self.assertFalse(Certificate.objects.filter(user=self.user, course=empty).exists())
 
 
@@ -801,3 +802,36 @@ class CoursesCompletionSelectorTests(TestCase):
         # One grouped query for totals, one for done counts — no per-course fan-out.
         with self.assertNumQueries(2):
             courses_completion(self.user, [self.c1.id, self.c2.id])
+
+
+from learning.services import record_lesson_view, complete_lesson
+
+
+class LessonServiceTests(TestCase):
+    """record_lesson_view / complete_lesson exercised directly — no HTTP cycle."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('svc')
+        self.course = Course.objects.create(title='C', slug='svc-c', status='published')
+        m = Module.objects.create(title='M', slug='m', course=self.course, order=0)
+        self.lesson = Lesson.objects.create(title='L', slug='l', module=m, order=0)
+
+    def test_record_view_enrolls_and_logs_but_does_not_complete(self):
+        progress, created = record_lesson_view(self.user, self.lesson)
+        self.assertTrue(created)
+        self.assertFalse(progress.is_completed)
+        self.assertTrue(Enrollment.objects.filter(user=self.user, course=self.course).exists())
+        self.assertTrue(LessonView.objects.filter(user=self.user, lesson=self.lesson).exists())
+
+    def test_record_view_is_idempotent_per_day(self):
+        record_lesson_view(self.user, self.lesson)
+        _, created = record_lesson_view(self.user, self.lesson)
+        self.assertFalse(created)
+        self.assertEqual(LessonView.objects.filter(user=self.user, lesson=self.lesson).count(), 1)
+
+    def test_complete_lesson_completes_enrolls_and_issues_certificate(self):
+        progress = complete_lesson(self.user, self.lesson)
+        self.assertTrue(progress.is_completed)
+        self.assertTrue(Enrollment.objects.filter(user=self.user, course=self.course).exists())
+        # Only lesson in the course → certificate issues.
+        self.assertTrue(Certificate.objects.filter(user=self.user, course=self.course).exists())

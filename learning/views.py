@@ -1,5 +1,4 @@
 import json
-import pytz
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -31,14 +30,13 @@ from .models import (
 )
 from .forms import CourseReviewForm, LessonQuestionForm, LessonAnswerForm
 from .selectors import course_progress, courses_completion
-from .utils import render_markdown
+from .services import (
+    complete_lesson, issue_certificate_if_complete, record_lesson_view,
+    update_streak,
+)
+from .utils import render_markdown, today_uzt
 
 User = get_user_model()
-UZT = pytz.timezone('Asia/Tashkent')  # UTC+5
-
-
-def _today_uzt():
-    return timezone.now().astimezone(UZT).date()
 
 
 def _meta_desc(*candidates, limit=160):
@@ -905,24 +903,7 @@ def record_view(request, course_slug, module_slug, lesson_slug):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
-    today = _today_uzt()
-
-    # Enroll on first play (the previous implicit enrollment happened on a GET of
-    # the lesson page, which inflated enrollments for anyone who merely opened it).
-    Enrollment.objects.get_or_create(user=request.user, course=lesson.module.course)
-
-    _, created = LessonView.objects.get_or_create(
-        user=request.user, lesson=lesson, viewed_on=today,
-    )
-
-    # Touch progress so last_watched_at reflects this view, but leave is_completed
-    # untouched — viewing is not completing.
-    progress, _ = LessonProgress.objects.get_or_create(
-        user=request.user, lesson=lesson
-    )
-    progress.save(update_fields=['last_watched_at'])
-
-    _update_streak(request.user)
+    progress, created = record_lesson_view(request.user, lesson)
 
     return JsonResponse({
         'status': 'ok',
@@ -941,61 +922,13 @@ def mark_lesson_complete(request, course_slug, module_slug, lesson_slug):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     lesson = _get_lesson(course_slug, module_slug, lesson_slug, request.user)
-
-    # Enroll on completion too (record_view does the same on first play); otherwise a
-    # user who completes via the manual button never gets an Enrollment row and the
-    # course is missing from "My Learning" / the profile lists.
-    Enrollment.objects.get_or_create(user=request.user, course=lesson.module.course)
-
-    progress, _ = LessonProgress.objects.get_or_create(
-        user=request.user, lesson=lesson
-    )
-    progress.is_completed = True
-    progress.save(update_fields=['is_completed'])
-
-    _update_streak(request.user)
-    _maybe_issue_certificate(request.user, lesson.module.course)
+    progress = complete_lesson(request.user, lesson)
 
     return JsonResponse({
         'status': 'ok',
         'is_completed': progress.is_completed,
         'lesson_id': lesson.id,
     })
-
-
-def _maybe_issue_certificate(user, course):
-    total = Lesson.objects.filter(module__course=course).count()
-    if not total:
-        return
-    completed = LessonProgress.objects.filter(
-        user=user, lesson__module__course=course, is_completed=True,
-    ).count()
-    if completed >= total:
-        Certificate.objects.get_or_create(user=user, course=course)
-
-
-def _update_streak(user):
-    from users.models import UserProfile
-    today = _today_uzt()
-
-    with transaction.atomic():
-        profile, _ = UserProfile.objects.select_for_update().get_or_create(user=user)
-
-        if profile.last_activity_date == today:
-            return
-
-        if profile.last_activity_date is not None:
-            delta = today - profile.last_activity_date
-            if delta.days == 1:
-                profile.current_streak += 1
-            else:
-                profile.current_streak = 1
-        else:
-            profile.current_streak = 1
-
-        profile.last_activity_date = today
-        profile.longest_streak = max(profile.longest_streak, profile.current_streak)
-        profile.save(update_fields=['current_streak', 'longest_streak', 'last_activity_date'])
 
 
 # ---------------------------------------------------------------------------
@@ -1067,7 +1000,7 @@ def submit_review(request, course_slug):
 @login_required
 def certificate_view(request, course_slug):
     course = get_object_or_404(Course, slug=course_slug)
-    _maybe_issue_certificate(request.user, course)
+    issue_certificate_if_complete(request.user, course)
     cert = Certificate.objects.filter(user=request.user, course=course).first()
     if not cert:
         messages.warning(request, "Sertifikat olish uchun kursni to'liq tugating.")
@@ -1223,7 +1156,7 @@ def leaderboard_view(request):
     from datetime import timedelta
 
     period = request.GET.get('davr', 'all')
-    today = _today_uzt()
+    today = today_uzt()
 
     base = LessonView.objects.all()
     if period == 'week':
@@ -1432,8 +1365,8 @@ def _finalize_quiz_attempt(attempt, user, lesson):
         LessonProgress.objects.update_or_create(
             user=user, lesson=lesson, defaults={'is_completed': True},
         )
-        _update_streak(user)
-        _maybe_issue_certificate(user, lesson.module.course)
+        update_streak(user)
+        issue_certificate_if_complete(user, lesson.module.course)
 
 
 @login_required

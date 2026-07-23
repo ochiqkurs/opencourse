@@ -1,5 +1,16 @@
 import markdown
 import bleach
+import pytz
+
+from django.utils import timezone
+
+UZT = pytz.timezone('Asia/Tashkent')  # UTC+5
+
+
+def today_uzt():
+    """Today's date in Asia/Tashkent (UTC+5) — the day boundary streaks and
+    daily lesson-views are keyed on."""
+    return timezone.now().astimezone(UZT).date()
 
 _ALLOWED_TAGS = [
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
