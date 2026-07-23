@@ -454,7 +454,7 @@ class CourseListView(View):
                 "dizayn, ma'lumotlar tahlili va boshqa yo'nalishlar. Video darslar, "
                 "konspektlar va testlar bilan."
             ),
-            'og_title': 'Barcha kurslar — Ochiq Kurs',
+            'og_title': 'Bepul onlayn kurslar — Ochiq Kurs',
         })
 
 
@@ -480,7 +480,7 @@ class CategoryDetailView(View):
                 category.description,
                 f"{category.name} yo'nalishidagi o'zbek tilidagi bepul onlayn kurslar.",
             ),
-            'og_title': f"{category.name} kurslari — Ochiq Kurs",
+            'og_title': f"Bepul {category.name} kurslari — Ochiq Kurs",
             'jsonld': _breadcrumb_jsonld(
                 ('Bosh sahifa', '/'),
                 ('Kurslar', reverse('learning:course_list')),

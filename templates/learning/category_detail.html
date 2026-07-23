@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load learning_extras %}
 
-{% block title %}{{ category.name }} - Kurslar{% endblock %}
+{% block title %}Bepul {{ category.name }} kurslari — Ochiq Kurs{% endblock %}
 
 {% block content %}
 <div class="container" style="padding-top:8px">
@@ -13,7 +13,7 @@
     <span>{{ category.name }}</span>
   </nav>
 
-  <h1>{{ category.name }}</h1>
+  <h1>Bepul {{ category.name }} kurslari</h1>
   {% if category.description %}
     <p class="description">{{ category.description }}</p>
   {% endif %}
